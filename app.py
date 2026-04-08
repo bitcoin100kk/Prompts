@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 from pathlib import Path
 
@@ -20,15 +21,24 @@ def inject_styles() -> None:
     st.markdown(
         """
         <style>
+        .block-container {
+            padding-top: 1.2rem;
+            padding-bottom: 1rem;
+        }
         .app-subtle {
             color: #5b6475;
             font-size: 0.92rem;
+        }
+        .toolbar-note {
+            color: #5b6475;
+            font-size: 0.88rem;
+            margin: 0.25rem 0 0.75rem;
         }
         .prompt-meta {
             display: flex;
             flex-wrap: wrap;
             gap: 0.4rem;
-            margin: 0.35rem 0 0.5rem;
+            margin: 0.25rem 0 0.35rem;
         }
         .prompt-chip {
             display: inline-block;
@@ -50,17 +60,83 @@ def inject_styles() -> None:
             color: #9a3412;
             border-color: #fed7aa;
         }
-        .helper-box {
-            border: 1px solid #e2e8f0;
-            border-radius: 0.85rem;
-            padding: 0.9rem 1rem;
-            background: #f8fafc;
-            margin-bottom: 1rem;
-        }
-        .copy-label {
+        .inline-note {
+            color: #475569;
             font-size: 0.86rem;
+            margin: 0.35rem 0 0.8rem;
+        }
+        .variables-callout {
+            border: 1px solid #dbeafe;
+            border-radius: 0.85rem;
+            padding: 0.8rem 0.9rem;
+            background: #eff6ff;
+            margin: 0.85rem 0;
+        }
+        .variables-title {
+            color: #1d4ed8;
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+        .variable-chip {
+            display: inline-block;
+            margin: 0.15rem 0.35rem 0.15rem 0;
+            padding: 0.22rem 0.55rem;
+            border-radius: 999px;
+            background: #ffffff;
+            color: #1e3a8a;
+            border: 1px solid #bfdbfe;
+            font-size: 0.8rem;
+        }
+        .prompt-preview {
+            border: 1px solid #1e293b;
+            border-radius: 0.9rem;
+            padding: 1rem;
+            background: #0f172a;
+            color: #f8fafc;
+            max-height: 30rem;
+            overflow: auto;
+            margin-top: 0.35rem;
+        }
+        .prompt-preview pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.92rem;
+            line-height: 1.5;
+        }
+        .draft-note {
+            border: 1px solid #fde68a;
+            border-radius: 0.85rem;
+            padding: 0.72rem 0.82rem;
+            background: #fffbeb;
+            color: #92400e;
+            margin-bottom: 0.8rem;
+            font-size: 0.9rem;
+        }
+        .results-note {
             color: #5b6475;
-            margin-bottom: 0.25rem;
+            font-size: 0.88rem;
+        }
+        .stButton > button {
+            border-radius: 0.75rem;
+        }
+        @media (max-width: 900px) {
+            .block-container {
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }
+            .prompt-preview {
+                max-height: 22rem;
+                padding: 0.85rem;
+            }
+            .prompt-meta {
+                gap: 0.3rem;
+            }
         }
         </style>
         """,
@@ -135,18 +211,18 @@ def request_prompt_switch(target_prompt: dict, current_prompt: dict | None) -> N
     remember_recent(target_prompt["id"])
 
 
-def render_copy_button(label: str, text: str, key: str) -> None:
+def render_copy_button(label: str, text: str, key: str, *, primary: bool = True) -> None:
     button_label = json.dumps(label)
     payload = json.dumps(text)
+    background = "#1d4ed8" if primary else "#0f766e"
     components.html(
         f"""
-        <div class="copy-label">Clipboard action</div>
         <button id="copy-button-{key}" style="
             width: 100%;
             padding: 0.65rem 0.9rem;
             border: none;
             border-radius: 0.7rem;
-            background: #1d4ed8;
+            background: {background};
             color: white;
             font-weight: 600;
             cursor: pointer;">
@@ -169,22 +245,22 @@ def render_copy_button(label: str, text: str, key: str) -> None:
 
             setTimeout(() => {{
                 button.textContent = originalLabel;
-                button.style.background = "#1d4ed8";
+                button.style.background = "{background}";
             }}, 1800);
         }});
         </script>
         """,
-        height=72,
+        height=54,
     )
 
 
-def render_prompt_badges(prompt: dict) -> None:
-    tags = "".join(f'<span class="prompt-chip">{tag}</span>' for tag in prompt["tags"][:4])
+def render_prompt_badges(prompt: dict, *, max_tags: int = 4) -> None:
+    tags = "".join(f'<span class="prompt-chip">{html.escape(tag)}</span>' for tag in prompt["tags"][:max_tags])
     status_class = f'prompt-chip status-{prompt["status"]}'
     st.markdown(
         f"""
         <div class="prompt-meta">
-            <span class="prompt-chip">{prompt["category"]}</span>
+            <span class="prompt-chip">{html.escape(prompt["category"])}</span>
             <span class="{status_class}">{prompt["status"].title()}</span>
             {tags}
         </div>
@@ -193,53 +269,119 @@ def render_prompt_badges(prompt: dict) -> None:
     )
 
 
-def render_sidebar(prompts: list[dict], source_status: dict) -> bool:
-    with st.sidebar:
-        st.title("Prompt Library")
-        st.caption("Find the right prompt fast, verify it, then copy the correct version.")
+def count_active_filters(prompts: list[dict]) -> int:
+    count = 0
+    available_statuses = sorted({prompt["status"] for prompt in prompts})
+    if st.session_state["category_filter"] != "All":
+        count += 1
+    if sorted(st.session_state["status_filter"]) != available_statuses:
+        count += 1
+    if st.session_state["favorites_only"]:
+        count += 1
+    if st.session_state["pinned_only"]:
+        count += 1
+    return count
 
-        st.text_input(
-            "Search",
-            key="query",
-            placeholder="debugging traceback, cold outreach, tax risk",
-        )
 
-        categories = ["All", *sorted({prompt["category"] for prompt in prompts})]
-        current_category = st.session_state["category_filter"]
-        category_index = categories.index(current_category) if current_category in categories else 0
-        st.session_state["category_filter"] = st.selectbox("Category", categories, index=category_index)
+def render_header_controls(prompts: list[dict], source_status: dict) -> bool:
+    st.text_input(
+        "Search prompts",
+        key="query",
+        placeholder="Find by task, prompt name, tag, or keyword",
+    )
 
-        available_statuses = sorted({prompt["status"] for prompt in prompts})
-        selected_statuses = st.multiselect(
-            "Status",
-            available_statuses,
-            default=st.session_state["status_filter"] or available_statuses,
-        )
-        st.session_state["status_filter"] = selected_statuses or available_statuses
-        st.session_state["favorites_only"] = st.checkbox("Favorites only", value=st.session_state["favorites_only"])
-        st.session_state["pinned_only"] = st.checkbox("Pinned only", value=st.session_state["pinned_only"])
+    filter_count = count_active_filters(prompts)
+    filter_label = f"Filters ({filter_count})" if filter_count else "Filters"
 
-        st.divider()
-        st.caption(f"JSON source: `{JSON_PATH.name}`")
-        if source_status["docx_exists"]:
-            st.caption(f"DOCX source: `{DOCX_PATH.name}`")
-        if source_status["docx_is_newer"]:
-            st.warning("Prompts.docx is newer than prompts.json. Rebuild to sync changes.")
+    categories = ["All", *sorted({prompt["category"] for prompt in prompts})]
+    current_category = st.session_state["category_filter"]
+    category_index = categories.index(current_category) if current_category in categories else 0
+    available_statuses = sorted({prompt["status"] for prompt in prompts})
 
-        rebuild_clicked = st.button(
-            "Rebuild prompts from DOCX",
-            use_container_width=True,
-            disabled=not source_status["docx_exists"],
-        )
-        st.download_button(
-            "Download prompts.json",
-            JSON_PATH.read_text(encoding="utf-8") if JSON_PATH.exists() else "[]",
-            file_name="prompts.json",
-            mime="application/json",
-            use_container_width=True,
-        )
+    control_left, control_right = st.columns(2, gap="small")
+    with control_left:
+        with st.popover(filter_label, use_container_width=True):
+            st.session_state["category_filter"] = st.selectbox("Category", categories, index=category_index)
+            selected_statuses = st.multiselect(
+                "Status",
+                available_statuses,
+                default=st.session_state["status_filter"] or available_statuses,
+            )
+            st.session_state["status_filter"] = selected_statuses or available_statuses
+            st.session_state["favorites_only"] = st.checkbox(
+                "Favorites only",
+                value=st.session_state["favorites_only"],
+            )
+            st.session_state["pinned_only"] = st.checkbox(
+                "Pinned only",
+                value=st.session_state["pinned_only"],
+            )
+
+    rebuild_clicked = False
+    with control_right:
+        with st.popover("Admin", use_container_width=True):
+            st.caption(f"JSON source: `{JSON_PATH.name}`")
+            if source_status["docx_exists"]:
+                st.caption(f"DOCX source: `{DOCX_PATH.name}`")
+            if source_status["docx_is_newer"]:
+                st.warning("Prompts.docx is newer than prompts.json. Rebuild to sync changes.")
+            rebuild_clicked = st.button(
+                "Rebuild prompts from DOCX",
+                use_container_width=True,
+                disabled=not source_status["docx_exists"],
+            )
+            st.download_button(
+                "Download prompts.json",
+                JSON_PATH.read_text(encoding="utf-8") if JSON_PATH.exists() else "[]",
+                file_name="prompts.json",
+                mime="application/json",
+                use_container_width=True,
+            )
+
+    summary_bits = [f"{len(prompts)} prompts loaded"]
+    if filter_count:
+        summary_bits.append(f"{filter_count} filter(s) active")
+    if source_status["docx_is_newer"]:
+        summary_bits.append("DOCX is newer than JSON")
+    st.markdown(f"<div class='toolbar-note'>{' | '.join(summary_bits)}</div>", unsafe_allow_html=True)
 
     return rebuild_clicked
+
+
+def split_recent_results(results: list[dict], recent_prompt_ids: list[str], query: str) -> tuple[list[dict], list[dict]]:
+    if query.strip() or not recent_prompt_ids:
+        return [], results
+
+    prompt_by_id = {prompt["id"]: prompt for prompt in results}
+    recent_prompts = [prompt_by_id[prompt_id] for prompt_id in recent_prompt_ids if prompt_id in prompt_by_id][:4]
+    recent_ids = {prompt["id"] for prompt in recent_prompts}
+    remaining = [prompt for prompt in results if prompt["id"] not in recent_ids]
+    return recent_prompts, remaining
+
+
+def render_variable_callout(variables: list[str]) -> None:
+    chips = "".join(f'<span class="variable-chip">{html.escape(variable)}</span>' for variable in variables)
+    st.markdown(
+        f"""
+        <div class="variables-callout">
+            <div class="variables-title">Required inputs / placeholders</div>
+            <div>{chips}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_canonical_preview(content: str) -> None:
+    escaped = html.escape(content)
+    st.markdown(
+        f"""
+        <div class="prompt-preview">
+            <pre>{escaped}</pre>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_pending_switch(prompts_by_id: dict[str, dict]) -> None:
@@ -267,50 +409,57 @@ def render_pending_switch(prompts_by_id: dict[str, dict]) -> None:
 
 
 def render_results(results: list[dict], current_prompt: dict | None) -> None:
-    st.subheader("Results")
+    st.markdown("#### Results")
     if not results:
         st.info("No prompts matched the current search and filters.")
         return
 
-    st.caption(f"{len(results)} prompt(s) matched.")
+    st.markdown(f"<div class='results-note'>{len(results)} prompt(s) matched.</div>", unsafe_allow_html=True)
 
-    recent_lookup = {item for item in st.session_state["recent_prompt_ids"]}
-    if not st.session_state["query"] and recent_lookup:
-        recent_prompts = [prompt for prompt in results if prompt["id"] in recent_lookup][:4]
-        if recent_prompts:
-            st.markdown("**Recent**")
-            for prompt in recent_prompts:
-                with st.container(border=True):
-                    selected = current_prompt and prompt["id"] == current_prompt["id"]
-                    if st.button(
-                        prompt["title"],
-                        key=f"recent-{prompt['id']}",
-                        type="primary" if selected else "secondary",
-                        use_container_width=True,
-                    ):
-                        request_prompt_switch(prompt, current_prompt)
-                        st.rerun()
-                    st.caption(prompt["use_case"])
-            st.markdown("**All matching prompts**")
+    recent_prompts, main_results = split_recent_results(
+        results,
+        st.session_state["recent_prompt_ids"],
+        st.session_state["query"],
+    )
 
-    for prompt in results[:MAX_RESULTS]:
+    if recent_prompts:
+        st.markdown("**Recent**")
+        for prompt in recent_prompts:
+            with st.container(border=True):
+                selected = current_prompt and prompt["id"] == current_prompt["id"]
+                if st.button(
+                    prompt["title"],
+                    key=f"recent-{prompt['id']}",
+                    type="primary" if selected else "secondary",
+                    use_container_width=True,
+                ):
+                    request_prompt_switch(prompt, current_prompt)
+                    st.rerun()
+                st.caption(prompt["use_case"])
+                render_prompt_badges(prompt, max_tags=2)
+
+    if recent_prompts and main_results:
+        st.markdown("**Matching prompts**")
+    elif recent_prompts and not main_results:
+        st.caption("No additional matching prompts outside your recent selections.")
+
+    for prompt in main_results[:MAX_RESULTS]:
         with st.container(border=True):
             selected = current_prompt and prompt["id"] == current_prompt["id"]
             if st.button(
                 prompt["title"],
                 key=f"select-{prompt['id']}",
                 type="primary" if selected else "secondary",
-                use_container_width=True,
-            ):
-                request_prompt_switch(prompt, current_prompt)
-                st.rerun()
+                    use_container_width=True,
+                ):
+                    request_prompt_switch(prompt, current_prompt)
+                    st.rerun()
             st.caption(prompt["use_case"])
-            render_prompt_badges(prompt)
-            st.markdown(f"<div class='app-subtle'>{prompt['description']}</div>", unsafe_allow_html=True)
+            render_prompt_badges(prompt, max_tags=2)
 
 
 def render_prompt_detail(prompt: dict | None) -> None:
-    st.subheader("Preview")
+    st.markdown("#### Preview")
     if not prompt:
         st.info("Select a prompt to inspect it here.")
         return
@@ -329,38 +478,33 @@ def render_prompt_detail(prompt: dict | None) -> None:
         st.markdown(f"**Prompt ID**: `{prompt['id']}`")
         st.markdown(f"**Aliases**: {', '.join(prompt['aliases']) if prompt['aliases'] else 'None'}")
 
-    if prompt["variables"]:
-        st.markdown("**Required inputs / placeholders**")
-        for variable in prompt["variables"]:
-            st.write(f"- {variable}")
-
-    st.text_area(
-        "Canonical prompt",
-        value=prompt["content"],
-        height=430,
-        disabled=True,
-        help="This is the source prompt. Copying from here always uses the unmodified version.",
-    )
-
-    copy_left, action_right = st.columns([1.1, 0.9])
-    with copy_left:
-        render_copy_button("Copy original", prompt["content"], f"original-{prompt['id']}")
+    action_left, action_right = st.columns(2, gap="small")
+    with action_left:
+        render_copy_button("Copy original", prompt["content"], f"original-{prompt['id']}", primary=True)
     with action_right:
-        st.markdown(
-            "<div class='helper-box'><strong>Safe copy flow</strong><br>"
-            "Use the original-copy button for the source prompt. Open Customize copy "
-            "only when you intentionally want a temporary edited version.</div>",
-            unsafe_allow_html=True,
-        )
         if st.button("Customize copy", use_container_width=True):
             st.session_state["edit_mode"] = True
             sync_working_copy(prompt)
             st.rerun()
 
+    st.markdown(
+        "<div class='inline-note'>Source prompt is read-only. Use <strong>Copy original</strong> for the canonical text. "
+        "Open <strong>Customize copy</strong> only when you intentionally want a temporary edited draft.</div>",
+        unsafe_allow_html=True,
+    )
+
+    if prompt["variables"]:
+        render_variable_callout(prompt["variables"])
+
+    render_canonical_preview(prompt["content"])
+
     if st.session_state["edit_mode"]:
         st.divider()
         st.markdown("### Working copy")
-        st.warning("This edited text is temporary and separate from the canonical source prompt.")
+        st.markdown(
+            "<div class='draft-note'>Temporary working copy. This edited version is separate from the canonical source prompt.</div>",
+            unsafe_allow_html=True,
+        )
         st.text_area(
             "Edited prompt",
             key="working_copy_text",
@@ -368,12 +512,13 @@ def render_prompt_detail(prompt: dict | None) -> None:
             help="This draft resets when you switch prompts and choose to discard changes.",
         )
 
-        edit_left, edit_mid, edit_right = st.columns(3)
+        edit_left, edit_mid, edit_right = st.columns(3, gap="small")
         with edit_left:
             render_copy_button(
                 "Copy edited version",
                 st.session_state["working_copy_text"],
                 f"edited-{prompt['id']}",
+                primary=False,
             )
         with edit_mid:
             if st.button("Reset to original", use_container_width=True):
@@ -401,7 +546,7 @@ def main() -> None:
 
     prompts, source_status = cached_load_prompts(str(BASE_DIR))
 
-    if render_sidebar(prompts, source_status):
+    if render_header_controls(prompts, source_status):
         rebuild_prompt_json(BASE_DIR)
         cached_load_prompts.clear()
         st.rerun()
@@ -421,11 +566,6 @@ def main() -> None:
     current_prompt = resolve_selected_prompt(ranked_prompts, st.session_state["selected_prompt_id"])
     prompts_by_id = {prompt["id"]: prompt for prompt in prompts}
 
-    st.title("Prompt Retrieval and Copy App")
-    st.caption(
-        "Task-first search, clean source-vs-working-copy separation, and a dataset generated "
-        "from your Prompts.docx."
-    )
     render_pending_switch(prompts_by_id)
 
     left_col, right_col = st.columns([0.95, 1.35], gap="large")

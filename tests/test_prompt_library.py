@@ -9,6 +9,7 @@ DOCX_PATH = BASE_DIR / "Prompts.docx"
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
+from app import split_recent_results
 from prompt_app.parser import build_prompt_records
 from prompt_app.search import search_prompts
 
@@ -34,6 +35,17 @@ class PromptLibraryTests(unittest.TestCase):
         ranked = search_prompts(prompts, query="llc tax contract risk", recent_prompt_ids=[])
         self.assertGreater(len(ranked), 0)
         self.assertEqual(ranked[0]["title"], "Legal / Tax")
+
+    def test_recent_results_are_partitioned_without_duplication(self) -> None:
+        results = [
+            {"id": "prompt-a", "title": "A"},
+            {"id": "prompt-b", "title": "B"},
+            {"id": "prompt-c", "title": "C"},
+        ]
+        recent_prompts, remaining = split_recent_results(results, ["prompt-c", "prompt-a"], query="")
+
+        self.assertEqual([prompt["id"] for prompt in recent_prompts], ["prompt-c", "prompt-a"])
+        self.assertEqual([prompt["id"] for prompt in remaining], ["prompt-b"])
 
 
 if __name__ == "__main__":
