@@ -162,6 +162,8 @@ def ensure_state() -> None:
         "favorites_only": False,
         "pinned_only": False,
         "query": "",
+        "auto_copy_payload": None,
+        "auto_copy_label": None,
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -202,8 +204,14 @@ def resolve_selected_prompt(prompts: list[dict], selected_prompt_id: str | None)
     return first
 
 
+def queue_auto_copy(prompt: dict) -> None:
+    st.session_state["auto_copy_payload"] = prompt["content"]
+    st.session_state["auto_copy_label"] = prompt["title"]
+
+
 def request_prompt_switch(target_prompt: dict, current_prompt: dict | None) -> None:
     if current_prompt and target_prompt["id"] == current_prompt["id"]:
+        queue_auto_copy(target_prompt)
         return
 
     if current_prompt and st.session_state["edit_mode"] and working_copy_is_dirty(current_prompt):
@@ -214,6 +222,7 @@ def request_prompt_switch(target_prompt: dict, current_prompt: dict | None) -> N
     st.session_state["pending_prompt_id"] = None
     sync_working_copy(target_prompt, force_reset=True)
     remember_recent(target_prompt["id"])
+    queue_auto_copy(target_prompt)
 
 
 def render_copy_button(label: str, text: str, key: str, *, primary: bool = True) -> None:
@@ -256,6 +265,23 @@ def render_copy_button(label: str, text: str, key: str, *, primary: bool = True)
         </script>
         """,
         height=54,
+    )
+
+
+def render_auto_copy() -> None:
+    payload = st.session_state.pop("auto_copy_payload", None)
+    st.session_state.pop("auto_copy_label", None)
+    if not payload:
+        return
+
+    components.html(
+        f"""
+        <script>
+        const payload = {json.dumps(payload)};
+        navigator.clipboard.writeText(payload).catch(() => {{}});
+        </script>
+        """,
+        height=0,
     )
 
 
@@ -425,7 +451,10 @@ def render_results(results: list[dict], current_prompt: dict | None) -> None:
         st.info("No prompts matched the current search and filters.")
         return
 
-    st.markdown(f"<div class='results-note'>{len(results)} prompt(s) matched.</div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='results-note'>{len(results)} prompt(s) matched. Tap any prompt to load it and auto-copy the original text.</div>",
+        unsafe_allow_html=True,
+    )
 
     recent_prompts, main_results = split_recent_results(
         results,
@@ -566,6 +595,8 @@ def main() -> None:
     ensure_state()
 
     prompts, source_status = cached_load_prompts(str(BASE_DIR))
+
+    render_auto_copy()
 
     if render_header_controls(prompts, source_status):
         rebuild_prompt_json(BASE_DIR)

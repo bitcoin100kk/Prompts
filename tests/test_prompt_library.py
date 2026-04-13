@@ -17,12 +17,17 @@ from prompt_app.search import search_prompts
 class PromptLibraryTests(unittest.TestCase):
     def test_docx_parses_into_expected_prompt_count(self) -> None:
         prompts = build_prompt_records(DOCX_PATH)
-        self.assertGreaterEqual(len(prompts), 19)
+        self.assertGreaterEqual(len(prompts), 24)
 
     def test_business_prompt_is_present(self) -> None:
         prompts = build_prompt_records(DOCX_PATH)
         titles = {prompt.title for prompt in prompts}
         self.assertIn("Opportunity Filter, not Idea Generator", titles)
+
+    def test_takeover_prompt_is_present(self) -> None:
+        prompts = build_prompt_records(DOCX_PATH)
+        titles = {prompt.title for prompt in prompts}
+        self.assertIn("TAKEOVER", titles)
 
     def test_search_finds_communication_prompt(self) -> None:
         prompts = [prompt.to_dict() for prompt in build_prompt_records(DOCX_PATH)]
