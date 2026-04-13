@@ -1813,3 +1813,174 @@ A future model might think the app was deeply architecture-refactored or that mo
    - source vs working-copy separation
    - dirty-edit protection
    - rebuild/download/admin access
+
+# 18. Continuation addendum — result-click copy/selection sync and DOCX refresh
+
+This addendum records the continuation work that happened after the main handoff sections above were written. It should be treated as the newer state where it conflicts with earlier text.
+
+## Latest user-reported issue
+
+The user reported two sequential result-list problems after the earlier copy-on-select changes:
+
+1. First issue:
+   - clicking a prompt in the results list did **not** automatically copy it
+
+2. After a first fix attempt:
+   - copy-on-click worked
+   - but clicking a result did **not** visually highlight the selected result
+   - and the right-side preview did **not** stay correlated with the clicked result
+
+The user then also re-attached `Prompts.docx` and required that all prompts be refreshed from the DOCX again.
+
+The user also added an ongoing process requirement:
+- from this point forward, all implementation work must also be reflected in the handoff
+
+## What was changed in this continuation round
+
+### A. Prompt data refresh from latest DOCX
+
+The project `Prompts.docx` was replaced with the newly attached DOCX and `data/prompts.json` was rebuilt from it.
+
+Observed result:
+- exported prompt count remained `24`
+- exported titles matched the DOCX-derived prompt titles
+
+This means the shipped JSON is now aligned to the latest attached DOCX at the title-set level.
+
+### B. Earlier result-click implementation was replaced
+
+The prior result-click approach used `components.html(...)` plus browser-side JS that attempted to:
+- copy the prompt text directly in the click event
+- then navigate by mutating the top-level URL query param
+
+That approach was able to restore copy-on-click in the browser, but it did **not** reliably restore Streamlit-side selection state.
+
+Practical failure mode:
+- copy happened in the iframe/button JS path
+- but the Streamlit app did not reliably receive a trustworthy selection event from that path
+- result: no stable highlight and no correct preview synchronization
+
+### C. New implementation: tiny custom Streamlit component for result selection
+
+A new custom component was added so the result row click can do both things in the right place:
+
+1. copy the canonical prompt text **inside the real click event**
+2. send the clicked prompt ID back to Python/Streamlit as actual component state
+
+Files added:
+- `prompt_app/result_select_component.py`
+- `prompt_app/components/result_select_copy/index.html`
+
+How it works:
+- the frontend component receives:
+  - `prompt_id`
+  - `title`
+  - `content`
+  - `selected`
+- on click it:
+  - tries `navigator.clipboard.writeText(content)`
+  - posts `streamlit:setComponentValue` with the clicked `prompt_id`
+- Streamlit reruns with the returned component value
+- `app.py` then calls `request_prompt_switch(...)`
+- state, recent-prompt tracking, selection highlight, and right-side preview are again driven by actual Streamlit state instead of fragile iframe navigation
+
+This is the important architectural correction in this round.
+
+## Additional logic adjustments in `app.py`
+
+### `request_prompt_switch(...)`
+
+The function now accepts:
+- `queue_copy: bool = True`
+
+Reason:
+- result-click copy is already handled inside the frontend component’s click event
+- queuing another rerun-time copy from Python would be redundant and less reliable
+
+Current use:
+- protected / normal Streamlit button flows can still use queued copy behavior
+- custom result-component flow calls:
+  - `request_prompt_switch(..., queue_copy=False)`
+
+### Dirty-edit confirm path
+
+When the user confirms:
+- `Discard edits and switch`
+
+the code now also queues canonical prompt copy before rerun:
+- `queue_auto_copy(target_prompt)`
+
+This preserves continuity with the “selection should copy” expectation as much as Streamlit’s rerun model allows.
+
+## Files changed in this continuation round
+
+Modified:
+- `app.py`
+- `Prompts.docx`
+- `data/prompts.json`
+- `tests/test_prompt_library.py`
+- `MASTER_HANDOFF_SUMMARY.md`
+
+Added:
+- `prompt_app/result_select_component.py`
+- `prompt_app/components/result_select_copy/index.html`
+
+## Testing and verification performed in this continuation round
+
+### 1. Python compile check
+Ran:
+- `python -m py_compile app.py prompt_app/*.py scripts/export_prompts.py tests/test_prompt_library.py`
+
+Result:
+- passed
+
+### 2. Unit tests
+Ran:
+- `python -m unittest -v tests/test_prompt_library.py`
+
+Result:
+- `7/7` tests passed
+
+New/updated evidence:
+- DOCX still parses into at least 24 prompts
+- shipped JSON title set matches DOCX-derived title set
+- existing search checks still pass
+- recent-results partition logic still passes
+
+### 3. Streamlit startup smoke test
+Ran:
+- `streamlit run app.py --server.headless true --server.port 8506`
+- HTTP probe against local server
+
+Result:
+- returned `HTTP 200`
+
+## What is now safer to trust
+
+Safer to trust than before:
+- result click copy behavior is no longer coupled to top-window URL navigation hacks alone
+- result selection highlight and preview synchronization are now once again connected to Streamlit-side state
+- shipped JSON has been refreshed from the newest attached DOCX
+- handoff now includes the post-handoff continuation work instead of stopping at the older broken state
+
+## What remains unverified
+
+Still not fully proven in a real browser session:
+- exact interactive behavior of the new custom result component in the user’s actual browser/device
+- exact visual highlight timing after click in the live UI
+- exact preview-update timing under all edge cases (especially rapid clicks and protected dirty-edit paths)
+
+Important distinction:
+- compile, tests, data export, and app startup are verified
+- full end-to-end browser interaction is still only strongly inferred from the new architecture, not visually proven inside this environment
+
+## Most likely future-model mistake after this addendum
+
+The most likely mistake would be to assume the earlier iframe-based JS result button is still the active mechanism.
+
+That is no longer true.
+
+Current result-click logic should be understood as:
+- custom component click -> clipboard write in frontend -> clicked prompt ID returned to Streamlit -> Streamlit state updates selection/preview
+
+That is the current source of truth for result-list interaction.

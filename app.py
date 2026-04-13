@@ -8,6 +8,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from prompt_app.library import load_prompts, rebuild_prompt_json
+from prompt_app.result_select_component import render_result_select_component
 from prompt_app.search import filter_prompts, search_prompts
 
 
@@ -230,9 +231,15 @@ def sync_query_to_selection(prompt_id: str | None) -> None:
         del st.query_params["prompt"]
 
 
-def request_prompt_switch(target_prompt: dict, current_prompt: dict | None) -> None:
+def request_prompt_switch(
+    target_prompt: dict,
+    current_prompt: dict | None,
+    *,
+    queue_copy: bool = True,
+) -> None:
     if current_prompt and target_prompt["id"] == current_prompt["id"]:
-        queue_auto_copy(target_prompt)
+        if queue_copy:
+            queue_auto_copy(target_prompt)
         return
 
     if current_prompt and st.session_state["edit_mode"] and working_copy_is_dirty(current_prompt):
@@ -243,7 +250,8 @@ def request_prompt_switch(target_prompt: dict, current_prompt: dict | None) -> N
     st.session_state["pending_prompt_id"] = None
     sync_working_copy(target_prompt, force_reset=True)
     remember_recent(target_prompt["id"])
-    queue_auto_copy(target_prompt)
+    if queue_copy:
+        queue_auto_copy(target_prompt)
 
 
 def render_copy_button(label: str, text: str, key: str, *, primary: bool = True) -> None:
@@ -306,73 +314,15 @@ def render_auto_copy() -> None:
     )
 
 
-def render_result_select_button(prompt: dict, *, selected: bool, key: str) -> None:
-    title = html.escape(prompt["title"])
-    button_class = "selected" if selected else "default"
-    components.html(
-        f"""
-        <style>
-        .select-copy-button {{
-            width: 100%;
-            padding: 0.72rem 0.9rem;
-            border-radius: 0.75rem;
-            border: 1px solid #cbd5e1;
-            background: #ffffff;
-            color: #0f172a;
-            font-weight: 600;
-            font-size: 0.98rem;
-            cursor: pointer;
-            transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-        }}
-        .select-copy-button:hover {{
-            border-color: #94a3b8;
-            background: #f8fafc;
-        }}
-        .select-copy-button.selected {{
-            background: #1d4ed8;
-            color: #ffffff;
-            border-color: #1d4ed8;
-        }}
-        </style>
-        <button id="select-copy-{key}" type="button" class="select-copy-button {button_class}">{title}</button>
-        <script>
-        const button = document.getElementById("select-copy-{key}");
-        const payload = {json.dumps(prompt["content"])};
-        const promptId = {json.dumps(prompt["id"])};
-
-        button.addEventListener("click", async () => {{
-            try {{
-                await navigator.clipboard.writeText(payload);
-            }} catch (error) {{
-                console.warn("Clipboard write failed", error);
-            }}
-
-            try {{
-                const target = new URL(window.parent.location.href);
-                const currentPrompt = target.searchParams.get("prompt");
-                if (currentPrompt === promptId) {{
-                    return;
-                }}
-                target.searchParams.set("prompt", promptId);
-                window.open(target.toString(), "_top");
-                return;
-            }} catch (error) {{
-                console.warn("Top-level navigation failed", error);
-            }}
-
-            try {{
-                const target = new URL(window.location.href);
-                target.searchParams.set("prompt", promptId);
-                window.location.assign(target.toString());
-            }} catch (error) {{
-                console.warn("Fallback navigation failed", error);
-            }}
-        }});
-        </script>
-        """,
-        height=58,
+def render_result_select_button(prompt: dict, *, selected: bool, key: str) -> bool:
+    clicked_prompt_id = render_result_select_component(
+        prompt_id=prompt["id"],
+        title=prompt["title"],
+        content=prompt["content"],
+        selected=selected,
+        key=key,
     )
-
+    return clicked_prompt_id == prompt["id"]
 
 def render_prompt_badges(prompt: dict, *, max_tags: int = 4) -> None:
     tags = "".join(f'<span class="prompt-chip">{html.escape(tag)}</span>' for tag in prompt["tags"][:max_tags])
@@ -527,6 +477,7 @@ def render_pending_switch(prompts_by_id: dict[str, dict]) -> None:
             st.session_state["edit_mode"] = False
             sync_working_copy(target_prompt, force_reset=True)
             remember_recent(target_prompt["id"])
+            queue_auto_copy(target_prompt)
             st.rerun()
     with cancel_col:
         if st.button("Keep editing current prompt", use_container_width=True):
@@ -572,11 +523,13 @@ def render_results(results: list[dict], current_prompt: dict | None) -> None:
                 st.rerun()
             return
 
-        render_result_select_button(
+        if render_result_select_button(
             prompt,
             selected=bool(selected),
             key=f"{prefix}-{prompt['id']}",
-        )
+        ):
+            request_prompt_switch(prompt, current_prompt, queue_copy=False)
+            st.rerun()
 
     if recent_prompts:
         st.markdown("**Recent**")

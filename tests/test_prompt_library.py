@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DOCX_PATH = BASE_DIR / "Prompts.docx"
+JSON_PATH = BASE_DIR / "data" / "prompts.json"
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
@@ -28,6 +30,16 @@ class PromptLibraryTests(unittest.TestCase):
         prompts = build_prompt_records(DOCX_PATH)
         titles = {prompt.title for prompt in prompts}
         self.assertIn("TAKEOVER", titles)
+
+    def test_exported_json_matches_docx_titles(self) -> None:
+        docx_prompts = build_prompt_records(DOCX_PATH)
+        exported_prompts = json.loads(JSON_PATH.read_text())
+
+        self.assertEqual(len(exported_prompts), len(docx_prompts))
+        self.assertEqual(
+            {prompt["title"] for prompt in exported_prompts},
+            {prompt.title for prompt in docx_prompts},
+        )
 
     def test_search_finds_communication_prompt(self) -> None:
         prompts = [prompt.to_dict() for prompt in build_prompt_records(DOCX_PATH)]

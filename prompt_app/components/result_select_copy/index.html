@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        font-family: sans-serif;
+      }
+      #result-button {
+        width: 100%;
+        padding: 0.72rem 0.9rem;
+        border-radius: 0.75rem;
+        border: 1px solid #cbd5e1;
+        background: #ffffff;
+        color: #0f172a;
+        font-weight: 600;
+        font-size: 0.98rem;
+        line-height: 1.25;
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+      }
+      #result-button:hover {
+        border-color: #94a3b8;
+        background: #f8fafc;
+      }
+      #result-button.selected {
+        background: #1d4ed8;
+        color: #ffffff;
+        border-color: #1d4ed8;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="result-button" type="button"></button>
+    <script>
+      const button = document.getElementById("result-button");
+      let currentArgs = {};
+
+      function sendMessage(type, extra = {}) {
+        window.parent.postMessage(
+          Object.assign({ isStreamlitMessage: true, type }, extra),
+          "*"
+        );
+      }
+
+      function setFrameHeight() {
+        const height = Math.max(
+          document.documentElement.scrollHeight || 0,
+          document.body.scrollHeight || 0,
+          58
+        );
+        sendMessage("streamlit:setFrameHeight", { height });
+      }
+
+      function applyArgs(args) {
+        currentArgs = args || {};
+        button.textContent = currentArgs.title || "";
+        button.classList.toggle("selected", Boolean(currentArgs.selected));
+        button.setAttribute("aria-pressed", currentArgs.selected ? "true" : "false");
+        window.requestAnimationFrame(setFrameHeight);
+      }
+
+      window.addEventListener("message", (event) => {
+        const message = event.data;
+        if (!message || message.type !== "streamlit:render") {
+          return;
+        }
+        applyArgs(message.args || {});
+      });
+
+      button.addEventListener("click", async () => {
+        const payload = typeof currentArgs.content === "string" ? currentArgs.content : "";
+        try {
+          await navigator.clipboard.writeText(payload);
+        } catch (error) {
+          console.warn("Clipboard write failed", error);
+        }
+        if (typeof currentArgs.prompt_id === "string" && currentArgs.prompt_id) {
+          sendMessage("streamlit:setComponentValue", { value: currentArgs.prompt_id });
+        }
+      });
+
+      sendMessage("streamlit:componentReady", { apiVersion: 1 });
+      setFrameHeight();
+    </script>
+  </body>
+</html>
