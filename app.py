@@ -8,7 +8,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from prompt_app.library import load_prompts, rebuild_prompt_json
-from prompt_app.result_select_component import render_result_select_component
 from prompt_app.search import filter_prompts, search_prompts
 
 
@@ -314,15 +313,41 @@ def render_auto_copy() -> None:
     )
 
 
-def render_result_select_button(prompt: dict, *, selected: bool, key: str) -> bool:
-    clicked_prompt_id = render_result_select_component(
-        prompt_id=prompt["id"],
-        title=prompt["title"],
-        content=prompt["content"],
-        selected=selected,
-        key=key,
+def inject_result_copy_bridge(results: list[dict], *, enabled: bool) -> None:
+    title_to_content = {prompt["title"]: prompt["content"] for prompt in results}
+    components.html(
+        f"""
+        <script>
+        const parentWindow = window.parent;
+        parentWindow.__promptCopyMap = {json.dumps(title_to_content)};
+        parentWindow.__promptCopyEnabled = {json.dumps(enabled)};
+
+        if (!parentWindow.__promptCopyHandlerInstalled) {{
+            parentWindow.__promptCopyHandlerInstalled = true;
+            parentWindow.document.addEventListener(
+                "pointerdown",
+                (event) => {{
+                    const button = event.target.closest("button");
+                    if (!button || !parentWindow.__promptCopyEnabled) {{
+                        return;
+                    }}
+
+                    const label = (button.innerText || "").trim();
+                    const payload = parentWindow.__promptCopyMap?.[label];
+                    if (typeof payload !== "string") {{
+                        return;
+                    }}
+
+                    navigator.clipboard.writeText(payload).catch(() => {{}});
+                }},
+                true
+            );
+        }}
+        </script>
+        """,
+        height=0,
     )
-    return clicked_prompt_id == prompt["id"]
+
 
 def render_prompt_badges(prompt: dict, *, max_tags: int = 4) -> None:
     tags = "".join(f'<span class="prompt-chip">{html.escape(tag)}</span>' for tag in prompt["tags"][:max_tags])
@@ -510,25 +535,21 @@ def render_results(results: list[dict], current_prompt: dict | None) -> None:
         st.session_state["query"],
     )
 
+    inject_result_copy_bridge(results, enabled=not protect_dirty_switch)
+
     def render_result_action(prompt: dict, prefix: str) -> None:
         selected = current_prompt and prompt["id"] == current_prompt["id"]
-        if protect_dirty_switch:
-            if st.button(
-                prompt["title"],
-                key=f"{prefix}-{prompt['id']}",
-                type="primary" if selected else "secondary",
-                use_container_width=True,
-            ):
-                request_prompt_switch(prompt, current_prompt)
-                st.rerun()
-            return
-
-        if render_result_select_button(
-            prompt,
-            selected=bool(selected),
+        if st.button(
+            prompt["title"],
             key=f"{prefix}-{prompt['id']}",
+            type="primary" if selected else "secondary",
+            use_container_width=True,
         ):
-            request_prompt_switch(prompt, current_prompt, queue_copy=False)
+            request_prompt_switch(
+                prompt,
+                current_prompt,
+                queue_copy=protect_dirty_switch,
+            )
             st.rerun()
 
     if recent_prompts:

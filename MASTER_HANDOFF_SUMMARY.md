@@ -1984,3 +1984,183 @@ Current result-click logic should be understood as:
 - custom component click -> clipboard write in frontend -> clicked prompt ID returned to Streamlit -> Streamlit state updates selection/preview
 
 That is the current source of truth for result-list interaction.
+
+
+====================
+CONTINUATION ADDENDUM — 2026-04-13 (state-sync correction after custom-component failure)
+====================
+
+## Why this addendum exists
+
+A real-user browser report, with screenshot evidence, showed that the previous continuation round did **not** fully solve result-list interaction.
+
+Observed user report:
+- clicking a prompt on the results side **did copy the clicked prompt**
+- but the clicked result did **not** become the selected/highlighted item
+- and the right-side preview stayed on the prior default prompt (`Communication`)
+
+This means the prior round solved clipboard behavior more successfully than selection-state synchronization.
+
+## Reality correction
+
+The previous handoff addendum was too optimistic about the custom result component.
+
+What turned out to be true in practice:
+- canonical text copy on result click was working for the user
+- the custom iframe component path was **not reliably propagating selected prompt state back into Streamlit**
+- therefore result highlight and preview correlation were still broken in the live UI
+
+This is now the corrected understanding.
+
+## Root cause interpretation
+
+Most likely failure point:
+- the custom frontend component could execute browser-side clipboard write logic
+- but the clicked prompt ID was not making it back into Streamlit state reliably enough to drive:
+  - `selected_prompt_id`
+  - result highlighting
+  - right-side preview selection
+
+In other words:
+- copy path worked better than state path
+- and because Streamlit selection state stayed stale, the UI still appeared to remain on `Communication`
+
+## Architectural correction made in this round
+
+The custom result component approach has been **removed**.
+
+Result interaction is now handled by **real Streamlit buttons again** so that selection, highlight state, and preview are driven by native Streamlit widget state.
+
+New approach:
+1. result rows use standard `st.button(...)`
+2. button click updates selection through the normal Streamlit path
+3. auto-copy is handled by a small hidden bridge script injected with `components.html(...)`
+4. that script attaches a delegated `pointerdown` listener in the parent document and copies the canonical prompt text for visible result buttons
+
+This restores a more defensible separation of responsibilities:
+- **Streamlit widgets** own selected prompt state and preview correlation
+- **frontend JS bridge** owns copy-on-click behavior only
+
+That is the current mechanism.
+
+## Important behavioral consequences
+
+### What should now be true
+
+When result-list interaction is working correctly:
+- clicking `Computer Science` should copy the canonical `Computer Science` prompt
+- the `Computer Science` result row should become highlighted
+- the right-side preview should switch to `Computer Science`
+
+### Dirty-edit protection
+
+The bridge is deliberately disabled when unsaved edited working-copy state is open.
+
+Reason:
+- in protected dirty-edit mode, result switching should not silently auto-copy or silently switch away
+- instead the user stays on the guarded confirm/cancel flow
+
+Current intended behavior in dirty-edit mode:
+- selection attempts use normal protected Streamlit button flow
+- if the user confirms “Discard edits and switch,” queued canonical copy still happens after the confirm path
+
+## Files changed in this round
+
+Modified:
+- `app.py`
+- `Prompts.docx`
+- `data/prompts.json`
+- `MASTER_HANDOFF_SUMMARY.md`
+
+Removed (superseded failed path):
+- `prompt_app/result_select_component.py`
+- `prompt_app/components/result_select_copy/index.html`
+
+Notes:
+- the removed files were introduced in the prior round but were superseded because they did not reliably preserve Streamlit-side selection state in live use
+
+## Code-level summary of the new fix
+
+### In `app.py`
+
+#### New helper: `inject_result_copy_bridge(results, enabled=...)`
+
+What it does:
+- builds `{title: content}` for currently visible results
+- injects a zero-height HTML/JS bridge
+- stores visible prompt-title -> canonical-content map on `window.parent`
+- installs one delegated `pointerdown` handler on the parent document if not already present
+- when the user presses a visible result button:
+  - if copy bridge is enabled
+  - and if the button text matches a visible prompt title
+  - it writes that prompt’s canonical content to the clipboard
+
+#### Result rendering change
+
+The results pane now uses standard `st.button(...)` again for all result rows.
+
+Selection path now goes through:
+- Streamlit button click
+- `request_prompt_switch(...)`
+- `selected_prompt_id` update
+- rerun
+- normal highlight / preview recomputation
+
+This is intentionally simpler and more trustworthy than the previous custom-component state path.
+
+## Prompt source refresh in this round
+
+The newly attached `Prompts.docx` was copied into the project and `data/prompts.json` was rebuilt from it.
+
+Current shipped prompt count after rebuild:
+- 24 prompts
+
+## Verification performed in this round
+
+### 1. Rebuilt prompt JSON
+
+Ran:
+- `python scripts/export_prompts.py --docx Prompts.docx --output data/prompts.json`
+
+Result:
+- exported 24 prompts
+
+### 2. Python compile check
+
+Ran:
+- `python -m py_compile app.py prompt_app/*.py scripts/export_prompts.py tests/test_prompt_library.py`
+
+Result:
+- passed
+
+### 3. Unit tests
+
+Ran:
+- `python -m unittest -v tests/test_prompt_library.py`
+
+Result target after this round:
+- should remain fully passing
+
+### 4. Streamlit startup smoke test
+
+To be rerun after final packaging for this round.
+
+## What future models must not assume
+
+Do **not** assume the removed custom component is still the active result-click path.
+
+Current intended source of truth is:
+- real Streamlit result buttons for selection/highlight/preview
+- hidden JS bridge for clipboard copy only
+
+That is the correct current architecture after this addendum.
+
+## Most important continuity correction
+
+Previous addendum claim (too strong):
+- “result selection highlight and preview synchronization are now once again connected to Streamlit-side state”
+
+Corrected current interpretation:
+- that claim was **not fully justified by live behavior** at the time
+- screenshot/user evidence disproved it
+- the project has now been revised again so that selection/highlight/preview return to native Streamlit buttons instead of the failed custom component state path
