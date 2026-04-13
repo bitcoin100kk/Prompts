@@ -209,6 +209,27 @@ def queue_auto_copy(prompt: dict) -> None:
     st.session_state["auto_copy_label"] = prompt["title"]
 
 
+def sync_selection_from_query() -> str | None:
+    prompt_id = st.query_params.get("prompt")
+    if isinstance(prompt_id, list):
+        prompt_id = prompt_id[0] if prompt_id else None
+    if prompt_id:
+        st.session_state["selected_prompt_id"] = prompt_id
+    return prompt_id
+
+
+def sync_query_to_selection(prompt_id: str | None) -> None:
+    current_query_prompt = st.query_params.get("prompt")
+    if isinstance(current_query_prompt, list):
+        current_query_prompt = current_query_prompt[0] if current_query_prompt else None
+
+    if prompt_id:
+        if current_query_prompt != prompt_id:
+            st.query_params["prompt"] = prompt_id
+    elif current_query_prompt:
+        del st.query_params["prompt"]
+
+
 def request_prompt_switch(target_prompt: dict, current_prompt: dict | None) -> None:
     if current_prompt and target_prompt["id"] == current_prompt["id"]:
         queue_auto_copy(target_prompt)
@@ -282,6 +303,74 @@ def render_auto_copy() -> None:
         </script>
         """,
         height=0,
+    )
+
+
+def render_result_select_button(prompt: dict, *, selected: bool, key: str) -> None:
+    title = html.escape(prompt["title"])
+    button_class = "selected" if selected else "default"
+    components.html(
+        f"""
+        <style>
+        .select-copy-button {{
+            width: 100%;
+            padding: 0.72rem 0.9rem;
+            border-radius: 0.75rem;
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+            color: #0f172a;
+            font-weight: 600;
+            font-size: 0.98rem;
+            cursor: pointer;
+            transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+        }}
+        .select-copy-button:hover {{
+            border-color: #94a3b8;
+            background: #f8fafc;
+        }}
+        .select-copy-button.selected {{
+            background: #1d4ed8;
+            color: #ffffff;
+            border-color: #1d4ed8;
+        }}
+        </style>
+        <button id="select-copy-{key}" type="button" class="select-copy-button {button_class}">{title}</button>
+        <script>
+        const button = document.getElementById("select-copy-{key}");
+        const payload = {json.dumps(prompt["content"])};
+        const promptId = {json.dumps(prompt["id"])};
+
+        button.addEventListener("click", async () => {{
+            try {{
+                await navigator.clipboard.writeText(payload);
+            }} catch (error) {{
+                console.warn("Clipboard write failed", error);
+            }}
+
+            try {{
+                const target = new URL(window.parent.location.href);
+                const currentPrompt = target.searchParams.get("prompt");
+                if (currentPrompt === promptId) {{
+                    return;
+                }}
+                target.searchParams.set("prompt", promptId);
+                window.open(target.toString(), "_top");
+                return;
+            }} catch (error) {{
+                console.warn("Top-level navigation failed", error);
+            }}
+
+            try {{
+                const target = new URL(window.location.href);
+                target.searchParams.set("prompt", promptId);
+                window.location.assign(target.toString());
+            }} catch (error) {{
+                console.warn("Fallback navigation failed", error);
+            }}
+        }});
+        </script>
+        """,
+        height=58,
     )
 
 
@@ -451,8 +540,16 @@ def render_results(results: list[dict], current_prompt: dict | None) -> None:
         st.info("No prompts matched the current search and filters.")
         return
 
+    protect_dirty_switch = bool(
+        current_prompt and st.session_state["edit_mode"] and working_copy_is_dirty(current_prompt)
+    )
+    helper_text = (
+        "Tap any prompt to load it and auto-copy the original text."
+        if not protect_dirty_switch
+        else "Unsaved edits are open, so prompt switching stays in protected mode until you discard or cancel them."
+    )
     st.markdown(
-        f"<div class='results-note'>{len(results)} prompt(s) matched. Tap any prompt to load it and auto-copy the original text.</div>",
+        f"<div class='results-note'>{len(results)} prompt(s) matched. {helper_text}</div>",
         unsafe_allow_html=True,
     )
 
@@ -462,19 +559,30 @@ def render_results(results: list[dict], current_prompt: dict | None) -> None:
         st.session_state["query"],
     )
 
+    def render_result_action(prompt: dict, prefix: str) -> None:
+        selected = current_prompt and prompt["id"] == current_prompt["id"]
+        if protect_dirty_switch:
+            if st.button(
+                prompt["title"],
+                key=f"{prefix}-{prompt['id']}",
+                type="primary" if selected else "secondary",
+                use_container_width=True,
+            ):
+                request_prompt_switch(prompt, current_prompt)
+                st.rerun()
+            return
+
+        render_result_select_button(
+            prompt,
+            selected=bool(selected),
+            key=f"{prefix}-{prompt['id']}",
+        )
+
     if recent_prompts:
         st.markdown("**Recent**")
         for prompt in recent_prompts:
             with st.container(border=True):
-                selected = current_prompt and prompt["id"] == current_prompt["id"]
-                if st.button(
-                    prompt["title"],
-                    key=f"recent-{prompt['id']}",
-                    type="primary" if selected else "secondary",
-                    use_container_width=True,
-                ):
-                    request_prompt_switch(prompt, current_prompt)
-                    st.rerun()
+                render_result_action(prompt, "recent")
                 st.caption(prompt["use_case"])
                 render_prompt_badges(prompt, max_tags=2)
 
@@ -485,15 +593,7 @@ def render_results(results: list[dict], current_prompt: dict | None) -> None:
 
     for prompt in main_results[:MAX_RESULTS]:
         with st.container(border=True):
-            selected = current_prompt and prompt["id"] == current_prompt["id"]
-            if st.button(
-                prompt["title"],
-                key=f"select-{prompt['id']}",
-                type="primary" if selected else "secondary",
-                    use_container_width=True,
-                ):
-                    request_prompt_switch(prompt, current_prompt)
-                    st.rerun()
+            render_result_action(prompt, "select")
             st.caption(prompt["use_case"])
             render_prompt_badges(prompt, max_tags=2)
 
@@ -595,6 +695,7 @@ def main() -> None:
     ensure_state()
 
     prompts, source_status = cached_load_prompts(str(BASE_DIR))
+    query_selected_prompt_id = sync_selection_from_query()
 
     render_auto_copy()
 
@@ -615,8 +716,14 @@ def main() -> None:
         query=st.session_state["query"],
         recent_prompt_ids=st.session_state["recent_prompt_ids"],
     )
+    previous_selected_prompt_id = st.session_state.get("selected_prompt_id")
     current_prompt = resolve_selected_prompt(ranked_prompts, st.session_state["selected_prompt_id"])
     prompts_by_id = {prompt["id"]: prompt for prompt in prompts}
+
+    if current_prompt:
+        sync_query_to_selection(current_prompt["id"])
+        if query_selected_prompt_id == current_prompt["id"] or previous_selected_prompt_id != current_prompt["id"]:
+            remember_recent(current_prompt["id"])
 
     render_pending_switch(prompts_by_id)
 
