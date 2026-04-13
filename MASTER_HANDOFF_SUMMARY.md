@@ -1985,182 +1985,154 @@ Current result-click logic should be understood as:
 
 That is the current source of truth for result-list interaction.
 
+---
 
-====================
-CONTINUATION ADDENDUM — 2026-04-13 (state-sync correction after custom-component failure)
-====================
+## Continuation Addendum - 2026-04-13 - selection-state overwrite fix after UI-agent review
 
-## Why this addendum exists
+### Why this round happened
 
-A real-user browser report, with screenshot evidence, showed that the previous continuation round did **not** fully solve result-list interaction.
+The previous round still did not solve the core UX bug in the user's real browser.
 
-Observed user report:
-- clicking a prompt on the results side **did copy the clicked prompt**
-- but the clicked result did **not** become the selected/highlighted item
-- and the right-side preview stayed on the prior default prompt (`Communication`)
+User-reported symptom remained:
+- clicking a result could copy the clicked prompt correctly
+- but the selected highlight and right-side preview still stayed on `Communication`
+- example explicitly reported by user: clicked `Computer Science`, but `Communication` remained highlighted and previewed
 
-This means the prior round solved clipboard behavior more successfully than selection-state synchronization.
+The user then brought in a UI agent and provided that agent's diagnosis as an input document (`Pasted markdown.md`).
 
-## Reality correction
+### Most important diagnosis from this round
 
-The previous handoff addendum was too optimistic about the custom result component.
+The strongest hypothesis from the UI-agent review was correct enough to act on:
 
-What turned out to be true in practice:
-- canonical text copy on result click was working for the user
-- the custom iframe component path was **not reliably propagating selected prompt state back into Streamlit**
-- therefore result highlight and preview correlation were still broken in the live UI
+- `sync_selection_from_query()` was treating the query param as authoritative on every rerun
+- click-selection code updated `st.session_state["selected_prompt_id"]`
+- but the query param could remain stale for one rerun cycle
+- then the next rerun re-hydrated stale query-param state back into session state
+- because `Communication` is the default fallback/pinned-first selection, the visible symptom looked like selection snapping back to `Communication`
 
-This is now the corrected understanding.
+This means the app had a specific state-ownership bug, not a parser/search/data bug.
 
-## Root cause interpretation
+### What changed in `app.py`
 
-Most likely failure point:
-- the custom frontend component could execute browser-side clipboard write logic
-- but the clicked prompt ID was not making it back into Streamlit state reliably enough to drive:
-  - `selected_prompt_id`
-  - result highlighting
-  - right-side preview selection
+#### 1. Added guarded query-param normalization and hydration helpers
 
-In other words:
-- copy path worked better than state path
-- and because Streamlit selection state stayed stale, the UI still appeared to remain on `Communication`
+New helper functions:
+- `normalize_query_prompt_id(...)`
+- `should_hydrate_selection_from_query(...)`
 
-## Architectural correction made in this round
+Purpose:
+- normalize `st.query_params["prompt"]` safely
+- prevent stale or unchanged query params from overwriting the currently selected prompt on every rerun
 
-The custom result component approach has been **removed**.
+#### 2. Added session-state tracking for query-param synchronization
 
-Result interaction is now handled by **real Streamlit buttons again** so that selection, highlight state, and preview are driven by native Streamlit widget state.
+New session key:
+- `last_query_prompt_id`
 
-New approach:
-1. result rows use standard `st.button(...)`
-2. button click updates selection through the normal Streamlit path
-3. auto-copy is handled by a small hidden bridge script injected with `components.html(...)`
-4. that script attaches a delegated `pointerdown` listener in the parent document and copies the canonical prompt text for visible result buttons
+Purpose:
+- remember the last prompt ID already synchronized from/to the query param
+- distinguish external URL changes from internal reruns
 
-This restores a more defensible separation of responsibilities:
-- **Streamlit widgets** own selected prompt state and preview correlation
-- **frontend JS bridge** owns copy-on-click behavior only
+#### 3. Hardened `sync_selection_from_query()`
 
-That is the current mechanism.
+Previous behavior:
+- every rerun, if a `prompt` query param existed, it directly overwrote `st.session_state["selected_prompt_id"]`
 
-## Important behavioral consequences
+New behavior:
+- only hydrate selection from query params when the query param is new/changed relative to `last_query_prompt_id`
+- do not blindly overwrite authoritative selection on every rerun
 
-### What should now be true
+This is the main fix for the user's reported symptom.
 
-When result-list interaction is working correctly:
-- clicking `Computer Science` should copy the canonical `Computer Science` prompt
-- the `Computer Science` result row should become highlighted
-- the right-side preview should switch to `Computer Science`
+#### 4. Updated `sync_query_to_selection()` to keep session/query sync aligned
 
-### Dirty-edit protection
+New behavior:
+- normalize prompt IDs before comparison
+- update `st.query_params["prompt"]` only when needed
+- also update `st.session_state["last_query_prompt_id"]`
 
-The bridge is deliberately disabled when unsaved edited working-copy state is open.
+This makes the current selection and query param advance together.
 
-Reason:
-- in protected dirty-edit mode, result switching should not silently auto-copy or silently switch away
-- instead the user stays on the guarded confirm/cancel flow
+#### 5. Updated `request_prompt_switch(...)`
 
-Current intended behavior in dirty-edit mode:
-- selection attempts use normal protected Streamlit button flow
-- if the user confirms “Discard edits and switch,” queued canonical copy still happens after the confirm path
+Now when prompt selection changes, it also calls:
+- `sync_query_to_selection(target_prompt["id"])`
 
-## Files changed in this round
+This happens inside the authoritative prompt-switch path, so selection and query param move together before rerun.
 
-Modified:
-- `app.py`
-- `Prompts.docx`
-- `data/prompts.json`
-- `MASTER_HANDOFF_SUMMARY.md`
+Also for the “same prompt clicked again” path:
+- selection now keeps query param in sync before optional copy queuing
 
-Removed (superseded failed path):
-- `prompt_app/result_select_component.py`
-- `prompt_app/components/result_select_copy/index.html`
+#### 6. Updated dirty-edit confirm path
 
-Notes:
-- the removed files were introduced in the prior round but were superseded because they did not reliably preserve Streamlit-side selection state in live use
+Inside `render_pending_switch(...)`, the confirm action now also calls:
+- `sync_query_to_selection(target_prompt["id"])`
 
-## Code-level summary of the new fix
+So protected switching no longer risks restoring stale query-param state after the user confirms the switch.
 
-### In `app.py`
+### Prompt source refresh in this round
 
-#### New helper: `inject_result_copy_bridge(results, enabled=...)`
+The project copy of `Prompts.docx` was replaced again with the newest user-attached file.
 
-What it does:
-- builds `{title: content}` for currently visible results
-- injects a zero-height HTML/JS bridge
-- stores visible prompt-title -> canonical-content map on `window.parent`
-- installs one delegated `pointerdown` handler on the parent document if not already present
-- when the user presses a visible result button:
-  - if copy bridge is enabled
-  - and if the button text matches a visible prompt title
-  - it writes that prompt’s canonical content to the clipboard
+Then JSON was rebuilt again:
+- `python scripts/export_prompts.py --docx Prompts.docx --output data/prompts.json`
 
-#### Result rendering change
+Current evidence after rebuild:
+- `data/prompts.json` contains 24 prompts
 
-The results pane now uses standard `st.button(...)` again for all result rows.
+### Tests added/updated in this round
 
-Selection path now goes through:
-- Streamlit button click
-- `request_prompt_switch(...)`
-- `selected_prompt_id` update
-- rerun
-- normal highlight / preview recomputation
+`tests/test_prompt_library.py` now imports and checks the new query-sync helpers.
 
-This is intentionally simpler and more trustworthy than the previous custom-component state path.
+New test added:
+- `test_query_prompt_helpers_guard_against_stale_rerun_overwrite`
 
-## Prompt source refresh in this round
+What it checks:
+- query prompt normalization works for list input / blank input
+- hydration should happen when query param changed externally
+- hydration should not happen when the query param is unchanged/stale
+- hydration should not happen for missing query params
 
-The newly attached `Prompts.docx` was copied into the project and `data/prompts.json` was rebuilt from it.
+### Verification performed in this round
 
-Current shipped prompt count after rebuild:
-- 24 prompts
-
-## Verification performed in this round
-
-### 1. Rebuilt prompt JSON
-
+#### 1. Prompt export
 Ran:
 - `python scripts/export_prompts.py --docx Prompts.docx --output data/prompts.json`
 
 Result:
-- exported 24 prompts
+- exported 24 prompts successfully
 
-### 2. Python compile check
+#### 2. Python compile check
+To be rerun after patching in this round.
 
-Ran:
-- `python -m py_compile app.py prompt_app/*.py scripts/export_prompts.py tests/test_prompt_library.py`
+#### 3. Unit tests
+To be rerun after patching in this round.
 
-Result:
-- passed
+#### 4. Streamlit startup smoke test
+To be rerun after patching in this round.
 
-### 3. Unit tests
+### What this round is intended to fix
 
-Ran:
-- `python -m unittest -v tests/test_prompt_library.py`
+Single result click should now be much more likely to do one coherent thing:
+- copy that prompt
+- select that prompt
+- highlight that prompt
+- preview that prompt
+- survive rerun without snapping back to stale query-param/default state
 
-Result target after this round:
-- should remain fully passing
+### What remains important to verify manually after this round
 
-### 4. Streamlit startup smoke test
+Still needs real browser confirmation:
+- clicking `Computer Science` actually leaves `Computer Science` highlighted
+- clicking `Computer Science` updates the right-side preview to `Computer Science`
+- same behavior works for other prompts, not just one test case
+- dirty-edit protected switching still behaves correctly
 
-To be rerun after final packaging for this round.
+### Most likely future-model mistake after this addendum
 
-## What future models must not assume
+The biggest future mistake would be to assume the remaining problem is still “clipboard-only” or “styling-only.”
 
-Do **not** assume the removed custom component is still the active result-click path.
+After this round, the central issue to reason about is:
+- **authoritative selection state versus rerun-time query-param hydration**
 
-Current intended source of truth is:
-- real Streamlit result buttons for selection/highlight/preview
-- hidden JS bridge for clipboard copy only
-
-That is the correct current architecture after this addendum.
-
-## Most important continuity correction
-
-Previous addendum claim (too strong):
-- “result selection highlight and preview synchronization are now once again connected to Streamlit-side state”
-
-Corrected current interpretation:
-- that claim was **not fully justified by live behavior** at the time
-- screenshot/user evidence disproved it
-- the project has now been revised again so that selection/highlight/preview return to native Streamlit buttons instead of the failed custom component state path
+That is the key mechanism changed here.

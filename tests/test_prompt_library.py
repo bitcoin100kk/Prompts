@@ -11,7 +11,7 @@ JSON_PATH = BASE_DIR / "data" / "prompts.json"
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from app import split_recent_results
+from app import normalize_query_prompt_id, should_hydrate_selection_from_query, split_recent_results
 from prompt_app.parser import build_prompt_records
 from prompt_app.search import search_prompts
 
@@ -52,6 +52,33 @@ class PromptLibraryTests(unittest.TestCase):
         ranked = search_prompts(prompts, query="llc tax contract risk", recent_prompt_ids=[])
         self.assertGreater(len(ranked), 0)
         self.assertEqual(ranked[0]["title"], "Legal / Tax")
+
+
+    def test_query_prompt_helpers_guard_against_stale_rerun_overwrite(self) -> None:
+        self.assertEqual(normalize_query_prompt_id(["prompt-computer-science"]), "prompt-computer-science")
+        self.assertIsNone(normalize_query_prompt_id("   "))
+
+        self.assertTrue(
+            should_hydrate_selection_from_query(
+                query_prompt_id="prompt-computer-science",
+                last_query_prompt_id="prompt-communication",
+                selected_prompt_id="prompt-communication",
+            )
+        )
+        self.assertFalse(
+            should_hydrate_selection_from_query(
+                query_prompt_id="prompt-communication",
+                last_query_prompt_id="prompt-communication",
+                selected_prompt_id="prompt-computer-science",
+            )
+        )
+        self.assertFalse(
+            should_hydrate_selection_from_query(
+                query_prompt_id=None,
+                last_query_prompt_id="prompt-communication",
+                selected_prompt_id="prompt-computer-science",
+            )
+        )
 
     def test_recent_results_are_partitioned_without_duplication(self) -> None:
         results = [
