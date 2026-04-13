@@ -122,6 +122,11 @@ def inject_styles() -> None:
             color: #5b6475;
             font-size: 0.88rem;
         }
+        .copy-footer-note {
+            color: #475569;
+            font-size: 0.86rem;
+            margin: 0.8rem 0 0.45rem;
+        }
         .stButton > button {
             border-radius: 0.75rem;
         }
@@ -384,6 +389,12 @@ def render_canonical_preview(content: str) -> None:
     )
 
 
+def get_results_panel_height(result_count: int) -> int | str:
+    if result_count > 10:
+        return 720
+    return "content"
+
+
 def render_pending_switch(prompts_by_id: dict[str, dict]) -> None:
     pending_prompt_id = st.session_state["pending_prompt_id"]
     if not pending_prompt_id:
@@ -497,6 +508,16 @@ def render_prompt_detail(prompt: dict | None) -> None:
         render_variable_callout(prompt["variables"])
 
     render_canonical_preview(prompt["content"])
+    st.markdown(
+        "<div class='copy-footer-note'>Finished reviewing? Copy the canonical prompt here too.</div>",
+        unsafe_allow_html=True,
+    )
+    render_copy_button(
+        "Copy original",
+        prompt["content"],
+        f"original-bottom-{prompt['id']}",
+        primary=True,
+    )
 
     if st.session_state["edit_mode"]:
         st.divider()
@@ -570,7 +591,8 @@ def main() -> None:
 
     left_col, right_col = st.columns([0.95, 1.35], gap="large")
     with left_col:
-        render_results(ranked_prompts, current_prompt)
+        with st.container(height=get_results_panel_height(len(ranked_prompts))):
+            render_results(ranked_prompts, current_prompt)
     with right_col:
         render_prompt_detail(current_prompt)
 
