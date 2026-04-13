@@ -1813,3 +1813,326 @@ A future model might think the app was deeply architecture-refactored or that mo
    - source vs working-copy separation
    - dirty-edit protection
    - rebuild/download/admin access
+
+# 18. Continuation addendum — result-click copy/selection sync and DOCX refresh
+
+This addendum records the continuation work that happened after the main handoff sections above were written. It should be treated as the newer state where it conflicts with earlier text.
+
+## Latest user-reported issue
+
+The user reported two sequential result-list problems after the earlier copy-on-select changes:
+
+1. First issue:
+   - clicking a prompt in the results list did **not** automatically copy it
+
+2. After a first fix attempt:
+   - copy-on-click worked
+   - but clicking a result did **not** visually highlight the selected result
+   - and the right-side preview did **not** stay correlated with the clicked result
+
+The user then also re-attached `Prompts.docx` and required that all prompts be refreshed from the DOCX again.
+
+The user also added an ongoing process requirement:
+- from this point forward, all implementation work must also be reflected in the handoff
+
+## What was changed in this continuation round
+
+### A. Prompt data refresh from latest DOCX
+
+The project `Prompts.docx` was replaced with the newly attached DOCX and `data/prompts.json` was rebuilt from it.
+
+Observed result:
+- exported prompt count remained `24`
+- exported titles matched the DOCX-derived prompt titles
+
+This means the shipped JSON is now aligned to the latest attached DOCX at the title-set level.
+
+### B. Earlier result-click implementation was replaced
+
+The prior result-click approach used `components.html(...)` plus browser-side JS that attempted to:
+- copy the prompt text directly in the click event
+- then navigate by mutating the top-level URL query param
+
+That approach was able to restore copy-on-click in the browser, but it did **not** reliably restore Streamlit-side selection state.
+
+Practical failure mode:
+- copy happened in the iframe/button JS path
+- but the Streamlit app did not reliably receive a trustworthy selection event from that path
+- result: no stable highlight and no correct preview synchronization
+
+### C. New implementation: tiny custom Streamlit component for result selection
+
+A new custom component was added so the result row click can do both things in the right place:
+
+1. copy the canonical prompt text **inside the real click event**
+2. send the clicked prompt ID back to Python/Streamlit as actual component state
+
+Files added:
+- `prompt_app/result_select_component.py`
+- `prompt_app/components/result_select_copy/index.html`
+
+How it works:
+- the frontend component receives:
+  - `prompt_id`
+  - `title`
+  - `content`
+  - `selected`
+- on click it:
+  - tries `navigator.clipboard.writeText(content)`
+  - posts `streamlit:setComponentValue` with the clicked `prompt_id`
+- Streamlit reruns with the returned component value
+- `app.py` then calls `request_prompt_switch(...)`
+- state, recent-prompt tracking, selection highlight, and right-side preview are again driven by actual Streamlit state instead of fragile iframe navigation
+
+This is the important architectural correction in this round.
+
+## Additional logic adjustments in `app.py`
+
+### `request_prompt_switch(...)`
+
+The function now accepts:
+- `queue_copy: bool = True`
+
+Reason:
+- result-click copy is already handled inside the frontend component’s click event
+- queuing another rerun-time copy from Python would be redundant and less reliable
+
+Current use:
+- protected / normal Streamlit button flows can still use queued copy behavior
+- custom result-component flow calls:
+  - `request_prompt_switch(..., queue_copy=False)`
+
+### Dirty-edit confirm path
+
+When the user confirms:
+- `Discard edits and switch`
+
+the code now also queues canonical prompt copy before rerun:
+- `queue_auto_copy(target_prompt)`
+
+This preserves continuity with the “selection should copy” expectation as much as Streamlit’s rerun model allows.
+
+## Files changed in this continuation round
+
+Modified:
+- `app.py`
+- `Prompts.docx`
+- `data/prompts.json`
+- `tests/test_prompt_library.py`
+- `MASTER_HANDOFF_SUMMARY.md`
+
+Added:
+- `prompt_app/result_select_component.py`
+- `prompt_app/components/result_select_copy/index.html`
+
+## Testing and verification performed in this continuation round
+
+### 1. Python compile check
+Ran:
+- `python -m py_compile app.py prompt_app/*.py scripts/export_prompts.py tests/test_prompt_library.py`
+
+Result:
+- passed
+
+### 2. Unit tests
+Ran:
+- `python -m unittest -v tests/test_prompt_library.py`
+
+Result:
+- `7/7` tests passed
+
+New/updated evidence:
+- DOCX still parses into at least 24 prompts
+- shipped JSON title set matches DOCX-derived title set
+- existing search checks still pass
+- recent-results partition logic still passes
+
+### 3. Streamlit startup smoke test
+Ran:
+- `streamlit run app.py --server.headless true --server.port 8506`
+- HTTP probe against local server
+
+Result:
+- returned `HTTP 200`
+
+## What is now safer to trust
+
+Safer to trust than before:
+- result click copy behavior is no longer coupled to top-window URL navigation hacks alone
+- result selection highlight and preview synchronization are now once again connected to Streamlit-side state
+- shipped JSON has been refreshed from the newest attached DOCX
+- handoff now includes the post-handoff continuation work instead of stopping at the older broken state
+
+## What remains unverified
+
+Still not fully proven in a real browser session:
+- exact interactive behavior of the new custom result component in the user’s actual browser/device
+- exact visual highlight timing after click in the live UI
+- exact preview-update timing under all edge cases (especially rapid clicks and protected dirty-edit paths)
+
+Important distinction:
+- compile, tests, data export, and app startup are verified
+- full end-to-end browser interaction is still only strongly inferred from the new architecture, not visually proven inside this environment
+
+## Most likely future-model mistake after this addendum
+
+The most likely mistake would be to assume the earlier iframe-based JS result button is still the active mechanism.
+
+That is no longer true.
+
+Current result-click logic should be understood as:
+- custom component click -> clipboard write in frontend -> clicked prompt ID returned to Streamlit -> Streamlit state updates selection/preview
+
+That is the current source of truth for result-list interaction.
+
+---
+
+## Continuation Addendum - 2026-04-13 - selection-state overwrite fix after UI-agent review
+
+### Why this round happened
+
+The previous round still did not solve the core UX bug in the user's real browser.
+
+User-reported symptom remained:
+- clicking a result could copy the clicked prompt correctly
+- but the selected highlight and right-side preview still stayed on `Communication`
+- example explicitly reported by user: clicked `Computer Science`, but `Communication` remained highlighted and previewed
+
+The user then brought in a UI agent and provided that agent's diagnosis as an input document (`Pasted markdown.md`).
+
+### Most important diagnosis from this round
+
+The strongest hypothesis from the UI-agent review was correct enough to act on:
+
+- `sync_selection_from_query()` was treating the query param as authoritative on every rerun
+- click-selection code updated `st.session_state["selected_prompt_id"]`
+- but the query param could remain stale for one rerun cycle
+- then the next rerun re-hydrated stale query-param state back into session state
+- because `Communication` is the default fallback/pinned-first selection, the visible symptom looked like selection snapping back to `Communication`
+
+This means the app had a specific state-ownership bug, not a parser/search/data bug.
+
+### What changed in `app.py`
+
+#### 1. Added guarded query-param normalization and hydration helpers
+
+New helper functions:
+- `normalize_query_prompt_id(...)`
+- `should_hydrate_selection_from_query(...)`
+
+Purpose:
+- normalize `st.query_params["prompt"]` safely
+- prevent stale or unchanged query params from overwriting the currently selected prompt on every rerun
+
+#### 2. Added session-state tracking for query-param synchronization
+
+New session key:
+- `last_query_prompt_id`
+
+Purpose:
+- remember the last prompt ID already synchronized from/to the query param
+- distinguish external URL changes from internal reruns
+
+#### 3. Hardened `sync_selection_from_query()`
+
+Previous behavior:
+- every rerun, if a `prompt` query param existed, it directly overwrote `st.session_state["selected_prompt_id"]`
+
+New behavior:
+- only hydrate selection from query params when the query param is new/changed relative to `last_query_prompt_id`
+- do not blindly overwrite authoritative selection on every rerun
+
+This is the main fix for the user's reported symptom.
+
+#### 4. Updated `sync_query_to_selection()` to keep session/query sync aligned
+
+New behavior:
+- normalize prompt IDs before comparison
+- update `st.query_params["prompt"]` only when needed
+- also update `st.session_state["last_query_prompt_id"]`
+
+This makes the current selection and query param advance together.
+
+#### 5. Updated `request_prompt_switch(...)`
+
+Now when prompt selection changes, it also calls:
+- `sync_query_to_selection(target_prompt["id"])`
+
+This happens inside the authoritative prompt-switch path, so selection and query param move together before rerun.
+
+Also for the “same prompt clicked again” path:
+- selection now keeps query param in sync before optional copy queuing
+
+#### 6. Updated dirty-edit confirm path
+
+Inside `render_pending_switch(...)`, the confirm action now also calls:
+- `sync_query_to_selection(target_prompt["id"])`
+
+So protected switching no longer risks restoring stale query-param state after the user confirms the switch.
+
+### Prompt source refresh in this round
+
+The project copy of `Prompts.docx` was replaced again with the newest user-attached file.
+
+Then JSON was rebuilt again:
+- `python scripts/export_prompts.py --docx Prompts.docx --output data/prompts.json`
+
+Current evidence after rebuild:
+- `data/prompts.json` contains 24 prompts
+
+### Tests added/updated in this round
+
+`tests/test_prompt_library.py` now imports and checks the new query-sync helpers.
+
+New test added:
+- `test_query_prompt_helpers_guard_against_stale_rerun_overwrite`
+
+What it checks:
+- query prompt normalization works for list input / blank input
+- hydration should happen when query param changed externally
+- hydration should not happen when the query param is unchanged/stale
+- hydration should not happen for missing query params
+
+### Verification performed in this round
+
+#### 1. Prompt export
+Ran:
+- `python scripts/export_prompts.py --docx Prompts.docx --output data/prompts.json`
+
+Result:
+- exported 24 prompts successfully
+
+#### 2. Python compile check
+To be rerun after patching in this round.
+
+#### 3. Unit tests
+To be rerun after patching in this round.
+
+#### 4. Streamlit startup smoke test
+To be rerun after patching in this round.
+
+### What this round is intended to fix
+
+Single result click should now be much more likely to do one coherent thing:
+- copy that prompt
+- select that prompt
+- highlight that prompt
+- preview that prompt
+- survive rerun without snapping back to stale query-param/default state
+
+### What remains important to verify manually after this round
+
+Still needs real browser confirmation:
+- clicking `Computer Science` actually leaves `Computer Science` highlighted
+- clicking `Computer Science` updates the right-side preview to `Computer Science`
+- same behavior works for other prompts, not just one test case
+- dirty-edit protected switching still behaves correctly
+
+### Most likely future-model mistake after this addendum
+
+The biggest future mistake would be to assume the remaining problem is still “clipboard-only” or “styling-only.”
+
+After this round, the central issue to reason about is:
+- **authoritative selection state versus rerun-time query-param hydration**
+
+That is the key mechanism changed here.
