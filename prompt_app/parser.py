@@ -80,6 +80,22 @@ SECTION_METADATA: dict[str, dict] = {
         "tags": ["summary", "handoff", "continuity", "archivist"],
         "aliases": ["conversation summary", "handoff summary", "continuation brief"],
     },
+    "takeover-general": {
+        "title": "Takeover (general)",
+        "category": "General",
+        "use_case": "Forensic takeover and continuity handoff for prompt-library project state.",
+        "description": "Structured takeover prompt focused on preserving implementation context, risks, and exact continuation steps.",
+        "tags": ["takeover", "handoff", "continuity", "general"],
+        "aliases": ["project takeover", "forensic handoff", "continuation takeover"],
+    },
+    "zip-file-general": {
+        "title": "Zip File (general)",
+        "category": "General",
+        "use_case": "Inspect and recover project context from archive files with high-fidelity extraction.",
+        "description": "Prompt for archive-first recovery workflows where source state is inside zip artifacts and needs structured analysis.",
+        "tags": ["zip", "archive", "recovery", "general"],
+        "aliases": ["zip inspection", "archive analysis", "zip takeover"],
+    },
     "computer-science": {
         "title": "Computer Science",
         "category": "Engineering",

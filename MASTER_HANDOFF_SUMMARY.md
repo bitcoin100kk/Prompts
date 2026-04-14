@@ -2075,3 +2075,48 @@ Verification:
 - `python -m unittest tests.test_prompt_library` passed (`5/5`)
 - import check passed (`app-import-ok`)
 - live Streamlit startup probe passed (`STATUS=200`)
+
+## 18.11 Selection/highlight/preview sync recovery + category correction (2026-04-13)
+
+User-reported regression:
+- one-click copy worked
+- selected result row was no longer highlighted correctly
+- preview pane did not switch to the clicked prompt
+- requested category correction:
+  - `Takeover (general)` should be under `General`
+  - `Zip File (general)` should be under `General`
+
+Root cause:
+- prior implementation used a query-param redirect path for selection (`pick=...`)
+- this diverged from native Streamlit button state flow and reintroduced selection drift
+
+Fix implemented:
+
+1. Reverted results interaction to native Streamlit selection path
+- removed query-param selection mechanism
+- removed custom result-click HTML button flow
+- restored `st.button` result rows (`recent-*` and `select-*`) so selected state, highlight, and preview all derive from the same state path
+
+2. Kept immediate copy on click
+- on successful prompt switch (`switch_state == "switched"`), app now calls `copy_text_on_select(prompt["content"])` in the same result-button handler
+- success/failure feedback is written to `auto_copy_feedback`
+
+3. Preserved dirty-edit protection
+- if switch is blocked (`switch_state == "blocked"`), user gets explicit guidance to resolve unsaved edits
+- no forced state overwrite was introduced
+
+4. Category correction for requested prompts
+- updated `prompt_app/parser.py` `SECTION_METADATA` with:
+  - `takeover-general` -> category `General`
+  - `zip-file-general` -> category `General`
+- rebuilt `data/prompts.json` from latest `Prompts.docx`
+- validation confirms both prompts now load under `General`
+
+Validation run:
+- `python scripts/export_prompts.py --docx Prompts.docx --output data/prompts.json` succeeded (`24` prompts)
+- category check confirms:
+  - `Takeover (general) => General`
+  - `Zip File (general) => General`
+- `python -m py_compile app.py prompt_app\\parser.py` passed
+- `python -m unittest tests.test_prompt_library` passed (`5/5`)
+- Streamlit startup probe passed (`STATUS=200`)

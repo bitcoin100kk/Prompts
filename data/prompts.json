@@ -186,14 +186,20 @@
     "id": "prompt-takeover-general",
     "slug": "takeover-general",
     "title": "Takeover (general)",
-    "category": "Takeover (General)",
-    "use_case": "You are the incoming takeover agent for an active project, program, workflow, research effort, operational process, product initiative,...",
-    "description": "You are the incoming takeover agent for an active project, program, workflow, research effort, operational process, product initiative, or mixed body of work. Your job is to reconstruct the true current state from...",
+    "category": "General",
+    "use_case": "Forensic takeover and continuity handoff for prompt-library project state.",
+    "description": "Structured takeover prompt focused on preserving implementation context, risks, and exact continuation steps.",
     "tags": [
       "takeover",
+      "handoff",
+      "continuity",
       "general"
     ],
-    "aliases": [],
+    "aliases": [
+      "project takeover",
+      "forensic handoff",
+      "continuation takeover"
+    ],
     "status": "active",
     "last_updated": "2026-04-13",
     "owner": null,
@@ -208,15 +214,20 @@
     "id": "prompt-zip-file-general",
     "slug": "zip-file-general",
     "title": "Zip File (general)",
-    "category": "Zip File (General)",
-    "use_case": "You are continuing an existing project from the attached ZIP archive.",
-    "description": "Your job is to continue the project from its current state, not restart it, not redesign it from scratch, and not reorganize it unless the work truly requires that. Primary objective:",
+    "category": "General",
+    "use_case": "Inspect and recover project context from archive files with high-fidelity extraction.",
+    "description": "Prompt for archive-first recovery workflows where source state is inside zip artifacts and needs structured analysis.",
     "tags": [
       "zip",
-      "file",
+      "archive",
+      "recovery",
       "general"
     ],
-    "aliases": [],
+    "aliases": [
+      "zip inspection",
+      "archive analysis",
+      "zip takeover"
+    ],
     "status": "active",
     "last_updated": "2026-04-13",
     "owner": null,
