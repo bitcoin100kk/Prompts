@@ -2269,3 +2269,31 @@ Validation:
 - `python -m py_compile app.py` passed
 - `python -m unittest -v tests/test_prompt_library.py` passed (`5/5`)
 - Streamlit startup probe passed (`HTTP 200`)
+
+## 18.16 Deployed sync hardening: avoid async-blocked top navigation (2026-04-13)
+
+User-reported issue after 18.15:
+- auto-copy worked
+- result highlight + preview still did not always follow the clicked result
+
+Likely cause in deployed iframe context:
+- click handler awaited async clipboard completion before attempting `window.parent.location.href`
+- deferred navigation can lose user-activation privileges in iframe/sandbox contexts, causing state update path (`pick`) to fail intermittently
+
+Fix implemented in `app.py`:
+
+1. Updated `render_result_select_copy_button(...)` click handler:
+- removed `async`/`await` from the result-click callback
+- performs copy attempts without blocking navigation:
+  - synchronous textarea `execCommand("copy")` fallback first
+  - `navigator.clipboard.writeText(...)` fire-and-forget second
+- immediately navigates parent URL with `pick=<prompt_id>` in same click event
+
+2. Simplified query hydration payload:
+- removed `copied` query param dependency from `apply_pick_from_query(...)`
+- selection sync now depends only on `pick`
+- copy failure warning from this route removed to prioritize deterministic selection/preview sync
+
+Validation:
+- `python -m py_compile app.py` passed
+- `python -m unittest -v tests/test_prompt_library.py` passed (`5/5`)

@@ -249,30 +249,28 @@ def render_result_select_copy_button(prompt: dict, *, selected: bool, key: str) 
         </button>
         <script>
         const btn = document.getElementById("pick-copy-{key}");
-        btn.addEventListener("click", async () => {{
-            let copied = false;
-            try {{
-                await window.parent.navigator.clipboard.writeText({payload});
-                copied = true;
-            }} catch (error) {{
-                try {{
-                    const fallback = window.parent.document.createElement("textarea");
-                    fallback.value = {payload};
-                    fallback.setAttribute("readonly", "");
-                    fallback.style.position = "fixed";
-                    fallback.style.top = "-9999px";
-                    window.parent.document.body.appendChild(fallback);
-                    fallback.focus();
-                    fallback.select();
-                    copied = window.parent.document.execCommand("copy");
-                    window.parent.document.body.removeChild(fallback);
-                }} catch (fallbackError) {{
-                    copied = false;
-                }}
-            }}
+        btn.addEventListener("click", () => {{
             const url = new URL(window.parent.location.href);
             url.searchParams.set("pick", {prompt_id});
-            url.searchParams.set("copied", copied ? "1" : "0");
+            try {{
+                const fallback = window.parent.document.createElement("textarea");
+                fallback.value = {payload};
+                fallback.setAttribute("readonly", "");
+                fallback.style.position = "fixed";
+                fallback.style.top = "-9999px";
+                window.parent.document.body.appendChild(fallback);
+                fallback.focus();
+                fallback.select();
+                window.parent.document.execCommand("copy");
+                window.parent.document.body.removeChild(fallback);
+            }} catch (fallbackError) {{
+                // No-op fallback failure.
+            }}
+            try {{
+                window.parent.navigator.clipboard.writeText({payload});
+            }} catch (error) {{
+                // Clipboard API can fail silently in some browser contexts.
+            }}
             window.parent.location.href = url.toString();
         }});
         </script>
@@ -296,16 +294,11 @@ def _query_value_as_text(value: str | list[str] | None) -> str | None:
 
 def apply_pick_from_query(prompts_by_id: dict[str, dict]) -> None:
     pick_prompt_id = _query_value_as_text(st.query_params.get("pick"))
-    copied_state = _query_value_as_text(st.query_params.get("copied"))
     if not pick_prompt_id:
         return
 
     try:
         del st.query_params["pick"]
-    except Exception:
-        pass
-    try:
-        del st.query_params["copied"]
     except Exception:
         pass
 
@@ -318,8 +311,6 @@ def apply_pick_from_query(prompts_by_id: dict[str, dict]) -> None:
     switch_state = request_prompt_switch(target_prompt, current_prompt)
     if switch_state == "blocked":
         st.session_state["auto_copy_feedback"] = "Unsaved edits detected. Confirm discard to switch prompts."
-    elif copied_state == "0":
-        st.session_state["auto_copy_feedback"] = f"Could not auto-copy '{target_prompt['title']}'. Use Copy original."
     else:
         st.session_state["auto_copy_feedback"] = ""
 
