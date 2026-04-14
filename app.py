@@ -200,6 +200,15 @@ def inject_styles() -> None:
         div[data-testid="stHorizontalBlock"] {
             gap: 0.5rem;
         }
+        div[data-testid="stIFrame"] {
+            background: transparent !important;
+            border: 0 !important;
+        }
+        div[data-testid="stIFrame"] iframe {
+            background: transparent !important;
+            border: 0 !important;
+            box-shadow: none !important;
+        }
         @media (max-width: 900px) {
             .block-container {
                 padding-top: 0.45rem;
@@ -334,11 +343,22 @@ def render_copy_button(label: str, text: str, key: str, *, primary: bool = True)
         html, body {{
             margin: 0;
             padding: 0;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            overflow: hidden;
+        }}
+        #copy-wrap-{key} {{
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
             background: transparent;
         }}
         #copy-button-{key} {{
             width: 100%;
-            padding: 0.56rem 0.8rem;
+            height: 100%;
+            padding: 0.5rem 0.8rem;
             border-radius: 0.72rem;
             border: 1px solid {border};
             background: {background};
@@ -348,15 +368,15 @@ def render_copy_button(label: str, text: str, key: str, *, primary: bool = True)
             line-height: 1.1;
             cursor: pointer;
             box-shadow: {shadow};
+            box-sizing: border-box;
         }}
         #copy-button-{key}:hover {{
             filter: brightness(1.05);
         }}
         </style>
-        <button id="copy-button-{key}" style="
-            width: 100%;">
-            {label}
-        </button>
+        <div id="copy-wrap-{key}">
+            <button id="copy-button-{key}" style="width: 100%;">{label}</button>
+        </div>
         <script>
         const button = document.getElementById("copy-button-{key}");
         const originalLabel = {button_label};
@@ -382,7 +402,7 @@ def render_copy_button(label: str, text: str, key: str, *, primary: bool = True)
         }});
         </script>
         """,
-        height=48,
+        height=44,
     )
 
 
