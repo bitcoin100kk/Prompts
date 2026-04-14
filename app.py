@@ -201,11 +201,11 @@ def inject_styles() -> None:
             gap: 0.5rem;
         }
         div[data-testid="stIFrame"] {
-            background: transparent !important;
+            background: #0b1324 !important;
             border: 0 !important;
         }
         div[data-testid="stIFrame"] iframe {
-            background: transparent !important;
+            background: #0b1324 !important;
             border: 0 !important;
             box-shadow: none !important;
         }
@@ -334,6 +334,7 @@ def handle_result_tap(target_prompt: dict, current_prompt: dict | None) -> None:
 def render_copy_button(label: str, text: str, key: str, *, primary: bool = True) -> None:
     button_label = json.dumps(label)
     payload = json.dumps(text)
+    component_surface = "#0b1324"
     background = "linear-gradient(180deg, #1f4fcf 0%, #1b42ab 100%)" if primary else "#12384a"
     border = "#2a64f8" if primary else "#2b6f8b"
     shadow = "inset 3px 0 0 0 #88a7ff" if primary else "inset 3px 0 0 0 #5ab2d3"
@@ -350,7 +351,7 @@ def render_copy_button(label: str, text: str, key: str, *, primary: bool = True)
                 padding: 0;
                 width: 100%;
                 height: 100%;
-                background: transparent;
+                background: {component_surface};
                 overflow: hidden;
             }}
             #copy-wrap-{key} {{
@@ -358,9 +359,11 @@ def render_copy_button(label: str, text: str, key: str, *, primary: bool = True)
                 height: 100%;
                 margin: 0;
                 padding: 0;
-                background: transparent;
+                background: {component_surface};
                 border: 0;
                 box-shadow: none;
+                display: flex;
+                align-items: stretch;
             }}
             #copy-button-{key} {{
                 width: 100%;
@@ -376,6 +379,8 @@ def render_copy_button(label: str, text: str, key: str, *, primary: bool = True)
                 cursor: pointer;
                 box-shadow: {shadow};
                 box-sizing: border-box;
+                margin: 0;
+                display: block;
             }}
             #copy-button-{key}:hover {{
                 filter: brightness(1.05);
@@ -419,7 +424,7 @@ def render_copy_button(label: str, text: str, key: str, *, primary: bool = True)
         </body>
         </html>
         """,
-        height=44,
+        height=42,
     )
 
 
