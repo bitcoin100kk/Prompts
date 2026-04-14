@@ -163,6 +163,7 @@ def ensure_state() -> None:
         "pinned_only": False,
         "query": "",
         "auto_copy_payload": None,
+        "auto_copy_on_select": False,
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -219,6 +220,8 @@ def request_prompt_switch(target_prompt: dict, current_prompt: dict | None) -> s
 
 
 def queue_auto_copy(text: str) -> None:
+    if not st.session_state.get("auto_copy_on_select", False):
+        return
     st.session_state["auto_copy_payload"] = text
 
 
@@ -355,6 +358,11 @@ def render_header_controls(prompts: list[dict], source_status: dict) -> bool:
     rebuild_clicked = False
     with control_right:
         with st.popover("Admin", use_container_width=True):
+            st.session_state["auto_copy_on_select"] = st.checkbox(
+                "Auto-copy on result click (experimental)",
+                value=st.session_state["auto_copy_on_select"],
+                help="May be blocked by browser clipboard policies. Copy original is always reliable.",
+            )
             st.caption(f"JSON source: `{JSON_PATH.name}`")
             if source_status["docx_exists"]:
                 st.caption(f"DOCX source: `{DOCX_PATH.name}`")
