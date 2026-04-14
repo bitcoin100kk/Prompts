@@ -2004,3 +2004,74 @@ Known browser caveat (explicit):
 - Auto-copy uses browser clipboard APIs.
 - Some browsers may block automatic clipboard writes after rerun boundaries.
 - The app still keeps manual `Copy original` actions available as fallback.
+
+## 18.9 Auto-copy warning UX correction (2026-04-13)
+
+Issue reported by user:
+- banner/text: `Browser blocked auto-copy. Use Copy original.` was showing and creating confusion/friction
+
+Root cause:
+- auto-copy is attempted from a post-rerun component script path
+- browser clipboard policies may block programmatic writes in that context
+- failure text was visible and noisy
+
+Fix implemented in `app.py`:
+
+1. Converted auto-copy attempt to silent best-effort:
+- `render_auto_copy_once()` now renders a zero-height component script (`height=0`)
+- clipboard write is attempted in JS
+- failure is caught silently
+
+2. Removed visible failure status text from this path:
+- no orange warning text rendered from auto-copy component
+- manual copy buttons remain authoritative fallback UX
+
+3. Preserved one-click attempt behavior:
+- result click still queues auto-copy via `queue_auto_copy(...)`
+- no separate selection path was introduced
+
+Verification after this correction:
+- `python -m unittest tests.test_prompt_library` passed (`5/5`)
+- `python -m py_compile app.py` passed
+- import check passed (`app-import-ok`)
+
+Current truthful behavior:
+- app attempts one-click auto-copy on selection
+- if browser blocks it, user can still copy reliably via explicit `Copy original` buttons
+- noisy blocker message is removed
+
+## 18.10 Result-click copy path rebuilt (2026-04-13)
+
+User-reported failure after 18.9:
+- clicking a result still did not copy the selected prompt reliably
+- manual `Copy original` continued to work
+
+Root cause:
+- auto-copy attempt was still decoupled from the exact browser click gesture
+- Streamlit rerun boundaries kept interfering with clipboard behavior
+
+Implemented fix in `app.py`:
+
+1. Replaced result-title `st.button` flow with a browser-side click control:
+- added `render_result_select_copy_button(...)`
+- on one click it now:
+  - attempts `navigator.clipboard.writeText(prompt_content)` directly in that click event
+  - updates URL query with `pick=<prompt_id>` and reloads parent page
+
+2. Added query-param hydration to keep selection/highlight/preview in sync:
+- added `apply_pick_from_query(...)`
+- reads `pick` from `st.query_params`
+- routes selection through existing `request_prompt_switch(...)`
+- clears `pick` param after handling
+
+3. Preserved dirty-edit protection path:
+- if switch is blocked by dirty edits, pending-switch flow remains active
+- manual `Copy original` stays available
+
+4. Left explicit copy buttons intact as reliability fallback.
+
+Verification:
+- `python -m py_compile app.py` passed
+- `python -m unittest tests.test_prompt_library` passed (`5/5`)
+- import check passed (`app-import-ok`)
+- live Streamlit startup probe passed (`STATUS=200`)
