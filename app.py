@@ -2,10 +2,6 @@ from __future__ import annotations
 
 import html
 import json
-import base64
-import platform
-import ctypes
-import subprocess
 from pathlib import Path
 
 import streamlit as st
@@ -222,60 +218,57 @@ def request_prompt_switch(target_prompt: dict, current_prompt: dict | None) -> s
     return "switched"
 
 
-def copy_text_on_select(text: str) -> bool:
-    """Copy prompt text server-side to avoid browser clipboard policy blocking."""
-    try:
-        if platform.system().lower().startswith("win"):
-            script = "Set-Clipboard -Value @'\n" + text + "\n'@"
-            encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
-            result = subprocess.run(
-                ["powershell", "-NoProfile", "-STA", "-EncodedCommand", encoded],
-                text=True,
-                capture_output=True,
-            )
-            if result.returncode == 0:
-                return True
-
-            # Fallback path if Set-Clipboard is unavailable in environment.
-            user32 = ctypes.windll.user32
-            kernel32 = ctypes.windll.kernel32
-            GMEM_MOVEABLE = 0x0002
-            CF_UNICODETEXT = 13
-
-            if not user32.OpenClipboard(None):
-                return False
-            try:
-                user32.EmptyClipboard()
-                encoded = text.encode("utf-16-le") + b"\x00\x00"
-                h_global = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(encoded))
-                if not h_global:
-                    return False
-                locked = kernel32.GlobalLock(h_global)
-                if not locked:
-                    kernel32.GlobalFree(h_global)
-                    return False
-                try:
-                    ctypes.memmove(locked, encoded, len(encoded))
-                finally:
-                    kernel32.GlobalUnlock(h_global)
-                if not user32.SetClipboardData(CF_UNICODETEXT, h_global):
-                    kernel32.GlobalFree(h_global)
-                    return False
-            finally:
-                user32.CloseClipboard()
-            return True
-        # Fallback for non-Windows local runs.
-        import tkinter as tk
-
-        root = tk.Tk()
-        root.withdraw()
-        root.clipboard_clear()
-        root.clipboard_append(text)
-        root.update()
-        root.destroy()
-        return True
-    except Exception:
-        return False
+def render_result_select_copy_button(prompt: dict, *, selected: bool, key: str) -> None:
+    payload = json.dumps(prompt["content"])
+    prompt_id = json.dumps(prompt["id"])
+    label = html.escape(prompt["title"])
+    background = "#b91c1c" if selected else "#0b1225"
+    border = "#dc2626" if selected else "#1f2937"
+    components.html(
+        f"""
+        <button id="pick-copy-{key}" style="
+            width: 100%;
+            padding: 0.62rem 0.75rem;
+            border-radius: 0.7rem;
+            border: 1px solid {border};
+            background: {background};
+            color: #f8fafc;
+            font-weight: 600;
+            cursor: pointer;">
+            {label}
+        </button>
+        <script>
+        const btn = document.getElementById("pick-copy-{key}");
+        btn.addEventListener("click", async () => {{
+            let copied = false;
+            try {{
+                await window.parent.navigator.clipboard.writeText({payload});
+                copied = true;
+            }} catch (error) {{
+                try {{
+                    const fallback = window.parent.document.createElement("textarea");
+                    fallback.value = {payload};
+                    fallback.setAttribute("readonly", "");
+                    fallback.style.position = "fixed";
+                    fallback.style.top = "-9999px";
+                    window.parent.document.body.appendChild(fallback);
+                    fallback.focus();
+                    fallback.select();
+                    copied = window.parent.document.execCommand("copy");
+                    window.parent.document.body.removeChild(fallback);
+                }} catch (fallbackError) {{
+                    copied = false;
+                }}
+            }}
+            const url = new URL(window.parent.location.href);
+            url.searchParams.set("pick", {prompt_id});
+            url.searchParams.set("copied", copied ? "1" : "0");
+            window.parent.location.href = url.toString();
+        }});
+        </script>
+        """,
+        height=56,
+    )
 
 
 def render_copy_button(label: str, text: str, key: str, *, primary: bool = True) -> None:
@@ -457,6 +450,37 @@ def get_results_panel_height(result_count: int) -> int | str:
     return "content"
 
 
+def apply_pick_from_query(prompts_by_id: dict[str, dict]) -> None:
+    pick_prompt_id = st.query_params.get("pick")
+    copied_state = st.query_params.get("copied")
+    if not pick_prompt_id:
+        return
+
+    try:
+        del st.query_params["pick"]
+    except Exception:
+        pass
+    try:
+        del st.query_params["copied"]
+    except Exception:
+        pass
+
+    target_prompt = prompts_by_id.get(pick_prompt_id)
+    if not target_prompt:
+        return
+
+    current_prompt = prompts_by_id.get(st.session_state.get("selected_prompt_id"))
+    switch_state = request_prompt_switch(target_prompt, current_prompt)
+    if switch_state == "blocked":
+        st.session_state["auto_copy_feedback"] = "Unsaved edits detected. Confirm discard to switch prompts."
+    elif copied_state == "0":
+        st.session_state["auto_copy_feedback"] = (
+            f"Could not auto-copy '{target_prompt['title']}'. Use Copy original."
+        )
+    else:
+        st.session_state["auto_copy_feedback"] = ""
+
+
 def render_pending_switch(prompts_by_id: dict[str, dict]) -> None:
     pending_prompt_id = st.session_state["pending_prompt_id"]
     if not pending_prompt_id:
@@ -474,12 +498,6 @@ def render_pending_switch(prompts_by_id: dict[str, dict]) -> None:
             st.session_state["edit_mode"] = False
             sync_working_copy(target_prompt, force_reset=True)
             remember_recent(target_prompt["id"])
-            if copy_text_on_select(target_prompt["content"]):
-                st.session_state["auto_copy_feedback"] = f"Copied '{target_prompt['title']}' to clipboard."
-            else:
-                st.session_state["auto_copy_feedback"] = (
-                    f"Could not auto-copy '{target_prompt['title']}'. Use Copy original."
-                )
             st.rerun()
     with cancel_col:
         if st.button("Keep editing current prompt", use_container_width=True):
@@ -506,25 +524,7 @@ def render_results(results: list[dict], current_prompt: dict | None) -> None:
         for prompt in recent_prompts:
             with st.container(border=True):
                 selected = current_prompt and prompt["id"] == current_prompt["id"]
-                if st.button(
-                    prompt["title"],
-                    key=f"recent-{prompt['id']}",
-                    type="primary" if selected else "secondary",
-                    use_container_width=True,
-                ):
-                    switch_state = request_prompt_switch(prompt, current_prompt)
-                    if switch_state == "switched":
-                        if copy_text_on_select(prompt["content"]):
-                            st.session_state["auto_copy_feedback"] = f"Copied '{prompt['title']}' to clipboard."
-                        else:
-                            st.session_state["auto_copy_feedback"] = (
-                                f"Could not auto-copy '{prompt['title']}'. Use Copy original."
-                            )
-                    elif switch_state == "blocked":
-                        st.session_state["auto_copy_feedback"] = (
-                            "Unsaved edits detected. Confirm discard to switch prompts."
-                        )
-                    st.rerun()
+                render_result_select_copy_button(prompt, selected=bool(selected), key=f"recent-{prompt['id']}")
                 st.caption(prompt["use_case"])
                 render_prompt_badges(prompt, max_tags=2)
 
@@ -536,25 +536,7 @@ def render_results(results: list[dict], current_prompt: dict | None) -> None:
     for prompt in main_results[:MAX_RESULTS]:
         with st.container(border=True):
             selected = current_prompt and prompt["id"] == current_prompt["id"]
-            if st.button(
-                prompt["title"],
-                key=f"select-{prompt['id']}",
-                type="primary" if selected else "secondary",
-                use_container_width=True,
-            ):
-                switch_state = request_prompt_switch(prompt, current_prompt)
-                if switch_state == "switched":
-                    if copy_text_on_select(prompt["content"]):
-                        st.session_state["auto_copy_feedback"] = f"Copied '{prompt['title']}' to clipboard."
-                    else:
-                        st.session_state["auto_copy_feedback"] = (
-                            f"Could not auto-copy '{prompt['title']}'. Use Copy original."
-                        )
-                elif switch_state == "blocked":
-                    st.session_state["auto_copy_feedback"] = (
-                        "Unsaved edits detected. Confirm discard to switch prompts."
-                    )
-                st.rerun()
+            render_result_select_copy_button(prompt, selected=bool(selected), key=f"select-{prompt['id']}")
             st.caption(prompt["use_case"])
             render_prompt_badges(prompt, max_tags=2)
 
@@ -674,12 +656,13 @@ def main() -> None:
         query=st.session_state["query"],
         recent_prompt_ids=st.session_state["recent_prompt_ids"],
     )
-    current_prompt = resolve_selected_prompt(ranked_prompts, st.session_state["selected_prompt_id"])
     prompts_by_id = {prompt["id"]: prompt for prompt in prompts}
+    apply_pick_from_query(prompts_by_id)
+    current_prompt = resolve_selected_prompt(ranked_prompts, st.session_state["selected_prompt_id"])
 
     render_pending_switch(prompts_by_id)
     if st.session_state.get("auto_copy_feedback"):
-        st.caption(st.session_state["auto_copy_feedback"])
+        st.warning(st.session_state["auto_copy_feedback"])
 
     left_col, right_col = st.columns([0.95, 1.35], gap="large")
     with left_col:

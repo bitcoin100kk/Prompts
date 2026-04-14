@@ -2148,3 +2148,39 @@ Validation:
 - integrated clipboard round-trip check succeeded:
   - `copy_text_on_select('integrated-check-123') -> True`
   - immediate `Get-Clipboard` returned `integrated-check-123`
+
+## 18.13 Final copy/selection reconciliation (2026-04-13)
+
+User-reported issue after 18.12:
+- preview/selection correlation improved in one pass, but result-click copy still failed in real browser usage
+- repeated `Could not auto-copy ...` feedback was unacceptable UX
+
+Resolution strategy:
+- stop relying on server-side clipboard writes for result-click copy
+- move copy back to browser click gesture
+- keep selection/highlight/preview in sync by correctly hydrating selected prompt from query params before rendering
+
+Implemented in `app.py`:
+
+1. Reintroduced browser-gesture copy for result row clicks:
+- `render_result_select_copy_button(...)` now handles click by:
+  - attempting `navigator.clipboard.writeText(prompt_content)`
+  - setting `pick=<prompt_id>` query param
+  - reloading parent URL
+
+2. Added and ordered query-param selection hydration correctly:
+- `apply_pick_from_query(prompts_by_id)`:
+  - reads `pick` param
+  - clears it
+  - routes through `request_prompt_switch(...)` (preserves dirty-edit protection)
+- called in `main()` before `resolve_selected_prompt(...)` so highlight and preview reflect the newly selected prompt in the same render pass.
+
+3. Removed noisy auto-copy failure path from server-side result-click flow.
+
+4. Preserved manual `Copy original` as authoritative fallback.
+
+Verification:
+- `python -m py_compile app.py` passed
+- `python -m unittest tests.test_prompt_library` passed (`5/5`)
+- import check passed (`app-import-ok`)
+- Streamlit startup probe passed (`STATUS=200`)
