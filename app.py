@@ -339,68 +339,85 @@ def render_copy_button(label: str, text: str, key: str, *, primary: bool = True)
     shadow = "inset 3px 0 0 0 #88a7ff" if primary else "inset 3px 0 0 0 #5ab2d3"
     components.html(
         f"""
-        <style>
-        html, body {{
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            background: transparent;
-            overflow: hidden;
-        }}
-        #copy-wrap-{key} {{
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            background: transparent;
-        }}
-        #copy-button-{key} {{
-            width: 100%;
-            height: 100%;
-            padding: 0.5rem 0.8rem;
-            border-radius: 0.72rem;
-            border: 1px solid {border};
-            background: {background};
-            color: #f6f9ff;
-            font-weight: 650;
-            font-size: 0.95rem;
-            line-height: 1.1;
-            cursor: pointer;
-            box-shadow: {shadow};
-            box-sizing: border-box;
-        }}
-        #copy-button-{key}:hover {{
-            filter: brightness(1.05);
-        }}
-        </style>
-        <div id="copy-wrap-{key}">
-            <button id="copy-button-{key}" style="width: 100%;">{label}</button>
-        </div>
-        <script>
-        const button = document.getElementById("copy-button-{key}");
-        const originalLabel = {button_label};
-        const payload = {payload};
-
-        button.addEventListener("click", async () => {{
-            try {{
-                await navigator.clipboard.writeText(payload);
-                button.textContent = "Copied";
-                button.style.background = "linear-gradient(180deg, #0d8f63 0%, #0a6f4e 100%)";
-                button.style.borderColor = "#1eb980";
-            }} catch (error) {{
-                button.textContent = "Clipboard blocked - press Ctrl+C after selecting text";
-                button.style.background = "#7a4a10";
-                button.style.borderColor = "#a56b22";
+        <!doctype html>
+        <html>
+        <head>
+            <meta charset="utf-8" />
+            <meta name="darkreader-lock" />
+            <style>
+            html, body {{
+                margin: 0;
+                padding: 0;
+                width: 100%;
+                height: 100%;
+                background: transparent;
+                overflow: hidden;
+            }}
+            #copy-wrap-{key} {{
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+                background: transparent;
+                border: 0;
+                box-shadow: none;
+            }}
+            #copy-button-{key} {{
+                width: 100%;
+                height: 100%;
+                padding: 0.5rem 0.8rem;
+                border-radius: 0.72rem;
+                border: 1px solid {border};
+                background: {background};
+                color: #f6f9ff;
+                font-weight: 650;
+                font-size: 0.95rem;
+                line-height: 1.1;
+                cursor: pointer;
+                box-shadow: {shadow};
+                box-sizing: border-box;
+            }}
+            #copy-button-{key}:hover {{
+                filter: brightness(1.05);
+            }}
+            </style>
+        </head>
+        <body>
+            <div id="copy-wrap-{key}">
+                <button id="copy-button-{key}" style="width: 100%;">{label}</button>
+            </div>
+            <script>
+            if (!document.head.querySelector('meta[name="darkreader-lock"]')) {{
+                const darkreaderLockMeta = document.createElement("meta");
+                darkreaderLockMeta.name = "darkreader-lock";
+                document.head.appendChild(darkreaderLockMeta);
             }}
 
-            setTimeout(() => {{
-                button.textContent = originalLabel;
-                button.style.background = "{background}";
-                button.style.borderColor = "{border}";
-            }}, 1800);
-        }});
-        </script>
+            const button = document.getElementById("copy-button-{key}");
+            const originalLabel = {button_label};
+            const payload = {payload};
+
+            button.addEventListener("click", async () => {{
+                try {{
+                    await navigator.clipboard.writeText(payload);
+                    button.textContent = "Copied";
+                    button.style.background = "linear-gradient(180deg, #0d8f63 0%, #0a6f4e 100%)";
+                    button.style.borderColor = "#1eb980";
+                }} catch (error) {{
+                    button.textContent = "Clipboard blocked - press Ctrl+C after selecting text";
+                    button.style.background = "#7a4a10";
+                    button.style.borderColor = "#a56b22";
+                }}
+
+                setTimeout(() => {{
+                    button.textContent = originalLabel;
+                    button.style.background = "{background}";
+                    button.style.borderColor = "{border}";
+                }}, 1800);
+            }});
+            </script>
+        </body>
+        </html>
         """,
         height=44,
     )
