@@ -2231,3 +2231,41 @@ Validation:
 Notes:
 - This reset prioritizes correctness of selection/highlight/preview synchronization first.
 - Auto-copy on result click now follows the same action path as selection state changes.
+
+## 18.15 Deployed-URL clipboard correction + robust pick hydration (2026-04-13)
+
+User clarification:
+- app is being used from a deployed URL (not local desktop Streamlit)
+
+Implication:
+- server-side clipboard copy cannot reliably copy into end-user browser clipboard on deployed hosting
+- one-click copy must occur in browser click gesture
+
+Fix implemented in `app.py`:
+
+1. Reintroduced browser-gesture copy on result-click:
+- result rows use `render_result_select_copy_button(...)` again
+- click handler attempts:
+  - `window.parent.navigator.clipboard.writeText(...)`
+  - fallback `textarea + execCommand("copy")`
+- sets query params:
+  - `pick=<prompt_id>`
+  - `copied=1|0`
+
+2. Hardened query-param hydration to avoid selection drift:
+- added `_query_value_as_text(...)`:
+  - handles `None`
+  - handles list-vs-string values from query params
+  - strips accidental wrapping quotes
+- `apply_pick_from_query(...)` now uses normalized values
+- clears `pick` and `copied` params after processing
+- calls `request_prompt_switch(...)` before resolving current prompt
+- sets feedback only when copy actually reports failure (`copied=0`) or dirty-edit block occurs
+
+3. Removed server-side auto-copy path from result-click selection:
+- avoids deployed-environment mismatch between server clipboard and client clipboard
+
+Validation:
+- `python -m py_compile app.py` passed
+- `python -m unittest -v tests/test_prompt_library.py` passed (`5/5`)
+- Streamlit startup probe passed (`HTTP 200`)

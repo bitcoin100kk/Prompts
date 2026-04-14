@@ -2,9 +2,6 @@ from __future__ import annotations
 
 import html
 import json
-import platform
-import shutil
-import subprocess
 from pathlib import Path
 
 import streamlit as st
@@ -231,50 +228,100 @@ def request_prompt_switch(target_prompt: dict, current_prompt: dict | None) -> s
     return "switched"
 
 
-def copy_text_on_select(text: str) -> bool:
-    system = platform.system().lower()
-    try:
-        if "windows" in system:
-            cmd = ["powershell", "-NoProfile", "-Command", "Set-Clipboard -Value $input"]
-            result = subprocess.run(cmd, input=text, capture_output=True, text=True, check=False)
-            if result.returncode == 0:
-                return True
-            # Fallback for environments where Set-Clipboard is unavailable.
-            clip_result = subprocess.run(["clip"], input=text, capture_output=True, text=True, check=False)
-            return clip_result.returncode == 0
-        if "darwin" in system:
-            result = subprocess.run(["pbcopy"], input=text, capture_output=True, text=True, check=False)
-            return result.returncode == 0
-        if shutil.which("wl-copy"):
-            result = subprocess.run(["wl-copy"], input=text, capture_output=True, text=True, check=False)
-            return result.returncode == 0
-        if shutil.which("xclip"):
-            result = subprocess.run(
-                ["xclip", "-selection", "clipboard"],
-                input=text,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            return result.returncode == 0
-    except Exception:
-        return False
-    return False
+def render_result_select_copy_button(prompt: dict, *, selected: bool, key: str) -> None:
+    payload = json.dumps(prompt["content"])
+    prompt_id = json.dumps(prompt["id"])
+    label = html.escape(prompt["title"])
+    background = "#b91c1c" if selected else "#0b1225"
+    border = "#dc2626" if selected else "#1f2937"
+    components.html(
+        f"""
+        <button id="pick-copy-{key}" style="
+            width: 100%;
+            padding: 0.62rem 0.75rem;
+            border-radius: 0.7rem;
+            border: 1px solid {border};
+            background: {background};
+            color: #f8fafc;
+            font-weight: 600;
+            cursor: pointer;">
+            {label}
+        </button>
+        <script>
+        const btn = document.getElementById("pick-copy-{key}");
+        btn.addEventListener("click", async () => {{
+            let copied = false;
+            try {{
+                await window.parent.navigator.clipboard.writeText({payload});
+                copied = true;
+            }} catch (error) {{
+                try {{
+                    const fallback = window.parent.document.createElement("textarea");
+                    fallback.value = {payload};
+                    fallback.setAttribute("readonly", "");
+                    fallback.style.position = "fixed";
+                    fallback.style.top = "-9999px";
+                    window.parent.document.body.appendChild(fallback);
+                    fallback.focus();
+                    fallback.select();
+                    copied = window.parent.document.execCommand("copy");
+                    window.parent.document.body.removeChild(fallback);
+                }} catch (fallbackError) {{
+                    copied = false;
+                }}
+            }}
+            const url = new URL(window.parent.location.href);
+            url.searchParams.set("pick", {prompt_id});
+            url.searchParams.set("copied", copied ? "1" : "0");
+            window.parent.location.href = url.toString();
+        }});
+        </script>
+        """,
+        height=56,
+    )
 
 
-def handle_result_click(prompt: dict, current_prompt: dict | None) -> None:
-    switch_state = request_prompt_switch(prompt, current_prompt)
-    if switch_state == "blocked":
-        st.session_state["auto_copy_feedback"] = "Unsaved edits detected. Confirm discard to switch prompts."
-        st.rerun()
+def _query_value_as_text(value: str | list[str] | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, list):
+        if not value:
+            return None
+        value = value[-1]
+    text = str(value).strip()
+    if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
+        text = text[1:-1]
+    return text or None
+
+
+def apply_pick_from_query(prompts_by_id: dict[str, dict]) -> None:
+    pick_prompt_id = _query_value_as_text(st.query_params.get("pick"))
+    copied_state = _query_value_as_text(st.query_params.get("copied"))
+    if not pick_prompt_id:
         return
 
-    copied = copy_text_on_select(prompt["content"])
-    if copied:
+    try:
+        del st.query_params["pick"]
+    except Exception:
+        pass
+    try:
+        del st.query_params["copied"]
+    except Exception:
+        pass
+
+    target_prompt = prompts_by_id.get(pick_prompt_id)
+    if not target_prompt:
         st.session_state["auto_copy_feedback"] = ""
+        return
+
+    current_prompt = prompts_by_id.get(st.session_state.get("selected_prompt_id"))
+    switch_state = request_prompt_switch(target_prompt, current_prompt)
+    if switch_state == "blocked":
+        st.session_state["auto_copy_feedback"] = "Unsaved edits detected. Confirm discard to switch prompts."
+    elif copied_state == "0":
+        st.session_state["auto_copy_feedback"] = f"Could not auto-copy '{target_prompt['title']}'. Use Copy original."
     else:
-        st.session_state["auto_copy_feedback"] = f"Could not auto-copy '{prompt['title']}'. Use Copy original."
-    st.rerun()
+        st.session_state["auto_copy_feedback"] = ""
 
 
 def render_copy_button(label: str, text: str, key: str, *, primary: bool = True) -> None:
@@ -499,13 +546,7 @@ def render_results(results: list[dict], current_prompt: dict | None) -> None:
         for prompt in recent_prompts:
             with st.container(border=True):
                 selected = current_prompt and prompt["id"] == current_prompt["id"]
-                if st.button(
-                    prompt["title"],
-                    key=f"recent-{prompt['id']}",
-                    type="primary" if selected else "secondary",
-                    use_container_width=True,
-                ):
-                    handle_result_click(prompt, current_prompt)
+                render_result_select_copy_button(prompt, selected=bool(selected), key=f"recent-{prompt['id']}")
                 st.caption(prompt["use_case"])
                 render_prompt_badges(prompt, max_tags=2)
 
@@ -517,13 +558,7 @@ def render_results(results: list[dict], current_prompt: dict | None) -> None:
     for prompt in main_results[:MAX_RESULTS]:
         with st.container(border=True):
             selected = current_prompt and prompt["id"] == current_prompt["id"]
-            if st.button(
-                prompt["title"],
-                key=f"select-{prompt['id']}",
-                type="primary" if selected else "secondary",
-                use_container_width=True,
-            ):
-                handle_result_click(prompt, current_prompt)
+            render_result_select_copy_button(prompt, selected=bool(selected), key=f"select-{prompt['id']}")
             st.caption(prompt["use_case"])
             render_prompt_badges(prompt, max_tags=2)
 
@@ -644,6 +679,7 @@ def main() -> None:
         recent_prompt_ids=st.session_state["recent_prompt_ids"],
     )
     prompts_by_id = {prompt["id"]: prompt for prompt in prompts}
+    apply_pick_from_query(prompts_by_id)
     current_prompt = resolve_selected_prompt(ranked_prompts, st.session_state["selected_prompt_id"])
 
     render_pending_switch(prompts_by_id)
