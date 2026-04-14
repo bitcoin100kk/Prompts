@@ -2184,3 +2184,50 @@ Verification:
 - `python -m unittest tests.test_prompt_library` passed (`5/5`)
 - import check passed (`app-import-ok`)
 - Streamlit startup probe passed (`STATUS=200`)
+
+## 18.14 Authoritative selection-path reset (2026-04-13)
+
+User-reported issue after 18.13:
+- result click could still auto-copy, but selected card highlight and preview panel could drift to a different prompt
+- this confirmed copy and selected state were still split across different mechanisms
+
+Root cause:
+- result rows were using custom HTML/JS + query-param routing for selection updates
+- Streamlit app state and browser-side click state were not reliably synchronized across reruns
+
+Fix implemented in `app.py`:
+
+1. Removed query-param selection flow:
+- deleted `apply_pick_from_query(...)` usage in `main()`
+- removed dependency on `pick` / `copied` URL params for core selection state
+
+2. Removed custom result-row HTML button path:
+- removed `render_result_select_copy_button(...)` usage
+- result rows now use native `st.button(...)` only
+
+3. Re-established one authoritative click path:
+- added `handle_result_click(prompt, current_prompt)`
+- on result click:
+  - calls `request_prompt_switch(...)` (same selection path used by app state)
+  - performs auto-copy attempt via `copy_text_on_select(...)`
+  - sets `auto_copy_feedback` only if copy fails or switch is blocked
+  - calls `st.rerun()` once
+
+4. Kept copy + selection coupled but state-safe:
+- highlight and preview now come from the same `selected_prompt_id` flow
+- no secondary selection path remains in browser JS
+
+5. Restored selected-card visual emphasis:
+- CSS update in `inject_styles()`:
+  - `.stButton > button[kind="primary"]` -> red selected styling
+  - `.stButton > button[kind="secondary"]` -> dark default styling
+- result cards render selected rows as `type="primary"` and others as `type="secondary"`
+
+Validation:
+- `python -m py_compile app.py` passed
+- `python -m unittest -v tests/test_prompt_library.py` passed (`5/5`)
+- Streamlit headless startup probe passed (`HTTP 200`)
+
+Notes:
+- This reset prioritizes correctness of selection/highlight/preview synchronization first.
+- Auto-copy on result click now follows the same action path as selection state changes.
