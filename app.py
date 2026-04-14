@@ -21,84 +21,89 @@ def inject_styles() -> None:
     st.markdown(
         """
         <style>
-        .block-container {
-            padding-top: 1.2rem;
-            padding-bottom: 1rem;
+        :root {
+            --card-bg: #0b1324;
+            --card-border: #18233b;
+            --card-border-active: #2b4b9a;
+            --text-muted: #93a1bb;
+            --title: #e9eefb;
+            --accent: #2d63f0;
         }
-        .app-subtle {
-            color: #5b6475;
-            font-size: 0.92rem;
+        .block-container {
+            padding-top: 0.65rem;
+            padding-bottom: 0.75rem;
         }
         .toolbar-note {
-            color: #5b6475;
-            font-size: 0.88rem;
-            margin: 0.25rem 0 0.75rem;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            margin: 0.2rem 0 0.55rem;
+            letter-spacing: 0.01em;
         }
         .prompt-meta {
             display: flex;
             flex-wrap: wrap;
-            gap: 0.4rem;
-            margin: 0.25rem 0 0.35rem;
+            gap: 0.28rem;
+            margin: 0.2rem 0 0;
         }
         .prompt-chip {
             display: inline-block;
-            padding: 0.18rem 0.55rem;
+            padding: 0.14rem 0.46rem;
             border-radius: 999px;
-            background: #eef2ff;
-            color: #233876;
-            font-size: 0.78rem;
+            background: #101d36;
+            color: #9ab3f0;
+            font-size: 0.72rem;
             line-height: 1.2;
-            border: 1px solid #dbe4ff;
+            border: 1px solid #24375c;
         }
         .prompt-chip.status-deprecated {
-            background: #fff1f2;
-            color: #9f1239;
-            border-color: #fecdd3;
+            background: #30131d;
+            color: #f3a8b4;
+            border-color: #6d2036;
         }
         .prompt-chip.status-draft {
-            background: #fff7ed;
-            color: #9a3412;
-            border-color: #fed7aa;
+            background: #2e2210;
+            color: #f5c08e;
+            border-color: #714712;
         }
         .inline-note {
-            color: #475569;
-            font-size: 0.86rem;
-            margin: 0.35rem 0 0.8rem;
+            color: #93a1bb;
+            font-size: 0.82rem;
+            margin: 0.25rem 0 0.55rem;
         }
         .variables-callout {
-            border: 1px solid #dbeafe;
-            border-radius: 0.85rem;
-            padding: 0.8rem 0.9rem;
-            background: #eff6ff;
-            margin: 0.85rem 0;
+            border: 1px solid #2a3f6b;
+            border-radius: 0.72rem;
+            padding: 0.62rem 0.72rem;
+            background: #101d36;
+            margin: 0.55rem 0;
         }
         .variables-title {
-            color: #1d4ed8;
-            font-size: 0.8rem;
+            color: #8fb0ff;
+            font-size: 0.72rem;
             font-weight: 700;
             letter-spacing: 0.04em;
             text-transform: uppercase;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.34rem;
         }
         .variable-chip {
             display: inline-block;
-            margin: 0.15rem 0.35rem 0.15rem 0;
-            padding: 0.22rem 0.55rem;
+            margin: 0.12rem 0.28rem 0.1rem 0;
+            padding: 0.16rem 0.45rem;
             border-radius: 999px;
-            background: #ffffff;
-            color: #1e3a8a;
-            border: 1px solid #bfdbfe;
-            font-size: 0.8rem;
+            background: #0c162e;
+            color: #9ebaf6;
+            border: 1px solid #36548d;
+            font-size: 0.74rem;
         }
         .prompt-preview {
-            border: 1px solid #1e293b;
-            border-radius: 0.9rem;
-            padding: 1rem;
-            background: #0f172a;
+            border: 1px solid #223253;
+            border-radius: 0.78rem;
+            padding: 0.8rem 0.86rem;
+            background: #0a1222;
             color: #f8fafc;
-            max-height: 30rem;
+            max-height: 28rem;
             overflow: auto;
-            margin-top: 0.35rem;
+            margin-top: 0.25rem;
         }
         .prompt-preview pre {
             margin: 0;
@@ -106,51 +111,124 @@ def inject_styles() -> None:
             word-break: break-word;
             overflow-wrap: anywhere;
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-            font-size: 0.92rem;
-            line-height: 1.5;
+            font-size: 0.84rem;
+            line-height: 1.45;
         }
         .draft-note {
-            border: 1px solid #fde68a;
-            border-radius: 0.85rem;
-            padding: 0.72rem 0.82rem;
-            background: #fffbeb;
-            color: #92400e;
-            margin-bottom: 0.8rem;
-            font-size: 0.9rem;
+            border: 1px solid #705321;
+            border-radius: 0.72rem;
+            padding: 0.56rem 0.64rem;
+            background: #241d12;
+            color: #edc888;
+            margin-bottom: 0.5rem;
+            font-size: 0.82rem;
         }
         .results-note {
-            color: #5b6475;
-            font-size: 0.88rem;
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            margin-bottom: 0.4rem;
         }
         .copy-footer-note {
-            color: #475569;
-            font-size: 0.86rem;
-            margin: 0.8rem 0 0.45rem;
+            color: #93a1bb;
+            font-size: 0.78rem;
+            margin: 0.58rem 0 0.36rem;
         }
-        .stButton > button {
-            border-radius: 0.75rem;
+        h2, h3, h4 {
+            color: var(--title);
+            margin-top: 0.1rem;
         }
-        .stButton > button[kind="primary"] {
-            background: #b91c1c;
-            border: 1px solid #dc2626;
-            color: #f8fafc;
+        div[data-testid="stTextInputRootElement"] input {
+            min-height: 2.35rem;
+            padding: 0.45rem 0.72rem;
+            border-radius: 0.72rem;
+            border: 1px solid #2a3a58;
+            font-size: 0.98rem;
+            background: #101826;
         }
-        .stButton > button[kind="secondary"] {
-            background: #0b1225;
-            border: 1px solid #1f2937;
-            color: #f8fafc;
+        div[data-testid="stPopover"] > div > button {
+            min-height: 2.25rem;
+            border-radius: 0.72rem;
+            font-size: 0.95rem;
+            font-weight: 600;
+            border: 1px solid #22304d;
+            background: #0d172d;
+            color: #dbe6ff;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            border: 1px solid var(--card-border) !important;
+            border-radius: 0.9rem !important;
+            background: var(--card-bg);
+            box-shadow: none !important;
+        }
+        div[data-testid="stButton"] > button {
+            min-height: 2.2rem;
+            border-radius: 0.72rem;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: 140ms ease-in-out;
+        }
+        div[data-testid="stButton"] > button[kind="secondary"] {
+            border: 1px solid #2a3a58;
+            background: #0f1a32;
+            color: #e6ecff;
+            box-shadow: none;
+        }
+        div[data-testid="stButton"] > button[kind="secondary"]:hover {
+            border-color: #3c5688;
+            background: #142347;
+            color: #f6f9ff;
+        }
+        div[data-testid="stButton"] > button[kind="primary"] {
+            border: 1px solid var(--card-border-active);
+            background: linear-gradient(180deg, #162a53 0%, #132444 100%);
+            color: #f4f7ff;
+            box-shadow: inset 3px 0 0 0 var(--accent);
+        }
+        div[data-testid="stButton"] > button[kind="primary"]:hover {
+            border-color: #4167c7;
+            background: linear-gradient(180deg, #1a3264 0%, #152d57 100%);
+        }
+        [data-testid="stCaptionContainer"] {
+            color: #96a4bf;
+            font-size: 0.84rem;
+        }
+        div[data-testid="stHorizontalBlock"] {
+            gap: 0.5rem;
         }
         @media (max-width: 900px) {
             .block-container {
-                padding-left: 1rem;
-                padding-right: 1rem;
+                padding-top: 0.45rem;
+                padding-left: 0.72rem;
+                padding-right: 0.72rem;
+                padding-bottom: 0.52rem;
             }
             .prompt-preview {
-                max-height: 22rem;
-                padding: 0.85rem;
+                max-height: 20rem;
+                padding: 0.68rem 0.72rem;
             }
             .prompt-meta {
-                gap: 0.3rem;
+                gap: 0.22rem;
+            }
+            div[data-testid="stTextInputRootElement"] input {
+                min-height: 2.12rem;
+                font-size: 0.95rem;
+            }
+            div[data-testid="stPopover"] > div > button {
+                min-height: 2.04rem;
+                font-size: 0.9rem;
+            }
+            div[data-testid="stButton"] > button {
+                min-height: 2.04rem;
+                font-size: 0.94rem;
+            }
+            h2 {
+                font-size: 1.7rem;
+            }
+            h3 {
+                font-size: 1.36rem;
+            }
+            h4 {
+                font-size: 1.2rem;
             }
         }
         </style>
@@ -228,96 +306,15 @@ def request_prompt_switch(target_prompt: dict, current_prompt: dict | None) -> s
     return "switched"
 
 
-def render_result_select_copy_button(prompt: dict, *, selected: bool, key: str) -> None:
-    payload = json.dumps(prompt["content"])
-    prompt_id = json.dumps(prompt["id"])
-    label = html.escape(prompt["title"])
-    background = "#b91c1c" if selected else "#0b1225"
-    border = "#dc2626" if selected else "#1f2937"
-    components.html(
-        f"""
-        <a id="pick-copy-{key}" href="#" target="_top" style="
-            display: block;
-            width: 100%;
-            padding: 0.62rem 0.75rem;
-            border-radius: 0.7rem;
-            border: 1px solid {border};
-            background: {background};
-            color: #f8fafc;
-            font-weight: 600;
-            cursor: pointer;
-            text-align: center;
-            text-decoration: none;
-            box-sizing: border-box;">
-            {label}
-        </a>
-        <script>
-        const link = document.getElementById("pick-copy-{key}");
-        const targetUrl = new URL(window.parent.location.href);
-        targetUrl.searchParams.set("pick", {prompt_id});
-        link.href = targetUrl.toString();
-
-        link.addEventListener("click", () => {{
-            try {{
-                const fallback = window.parent.document.createElement("textarea");
-                fallback.value = {payload};
-                fallback.setAttribute("readonly", "");
-                fallback.style.position = "fixed";
-                fallback.style.top = "-9999px";
-                window.parent.document.body.appendChild(fallback);
-                fallback.focus();
-                fallback.select();
-                window.parent.document.execCommand("copy");
-                window.parent.document.body.removeChild(fallback);
-            }} catch (fallbackError) {{
-                // No-op fallback failure.
-            }}
-            try {{
-                window.parent.navigator.clipboard.writeText({payload});
-            }} catch (error) {{
-                // Clipboard API can fail silently in some browser contexts.
-            }}
-        }});
-        </script>
-        """,
-        height=56,
-    )
-
-
-def _query_value_as_text(value: str | list[str] | None) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, list):
-        if not value:
-            return None
-        value = value[-1]
-    text = str(value).strip()
-    if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
-        text = text[1:-1]
-    return text or None
-
-
-def apply_pick_from_query(prompts_by_id: dict[str, dict]) -> None:
-    pick_prompt_id = _query_value_as_text(st.query_params.get("pick"))
-    if not pick_prompt_id:
-        return
-
-    try:
-        del st.query_params["pick"]
-    except Exception:
-        pass
-
-    target_prompt = prompts_by_id.get(pick_prompt_id)
-    if not target_prompt:
-        st.session_state["auto_copy_feedback"] = ""
-        return
-
-    current_prompt = prompts_by_id.get(st.session_state.get("selected_prompt_id"))
+def handle_result_tap(target_prompt: dict, current_prompt: dict | None) -> None:
     switch_state = request_prompt_switch(target_prompt, current_prompt)
     if switch_state == "blocked":
         st.session_state["auto_copy_feedback"] = "Unsaved edits detected. Confirm discard to switch prompts."
-    else:
-        st.session_state["auto_copy_feedback"] = ""
+        st.rerun()
+        return
+    st.session_state["auto_copy_feedback"] = ""
+    if switch_state == "switched":
+        st.rerun()
 
 
 def render_copy_button(label: str, text: str, key: str, *, primary: bool = True) -> None:
@@ -397,6 +394,7 @@ def render_header_controls(prompts: list[dict], source_status: dict) -> bool:
         "Search prompts",
         key="query",
         placeholder="Find by task, prompt name, tag, or keyword",
+        label_visibility="collapsed",
     )
 
     filter_count = count_active_filters(prompts)
@@ -447,11 +445,11 @@ def render_header_controls(prompts: list[dict], source_status: dict) -> bool:
                 use_container_width=True,
             )
 
-    summary_bits = [f"{len(prompts)} prompts loaded"]
+    summary_bits = [f"{len(prompts)} prompts"]
     if filter_count:
-        summary_bits.append(f"{filter_count} filter(s) active")
+        summary_bits.append(f"{filter_count} filters active")
     if source_status["docx_is_newer"]:
-        summary_bits.append("DOCX is newer than JSON")
+        summary_bits.append("DOCX newer than JSON")
     st.markdown(f"<div class='toolbar-note'>{' | '.join(summary_bits)}</div>", unsafe_allow_html=True)
 
     return rebuild_clicked
@@ -494,8 +492,6 @@ def render_canonical_preview(content: str) -> None:
 
 
 def get_results_panel_height(result_count: int) -> int | str:
-    if result_count > 10:
-        return 720
     return "content"
 
 
@@ -524,12 +520,11 @@ def render_pending_switch(prompts_by_id: dict[str, dict]) -> None:
 
 
 def render_results(results: list[dict], current_prompt: dict | None) -> None:
-    st.markdown("#### Results")
+    st.markdown("### Results")
     if not results:
         st.info("No prompts matched the current search and filters.")
         return
-
-    st.markdown(f"<div class='results-note'>{len(results)} prompt(s) matched.</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='results-note'>{len(results)} matched</div>", unsafe_allow_html=True)
 
     recent_prompts, main_results = split_recent_results(
         results,
@@ -542,7 +537,13 @@ def render_results(results: list[dict], current_prompt: dict | None) -> None:
         for prompt in recent_prompts:
             with st.container(border=True):
                 selected = current_prompt and prompt["id"] == current_prompt["id"]
-                render_result_select_copy_button(prompt, selected=bool(selected), key=f"recent-{prompt['id']}")
+                if st.button(
+                    prompt["title"],
+                    key=f"recent-{prompt['id']}",
+                    use_container_width=True,
+                    type="primary" if selected else "secondary",
+                ):
+                    handle_result_tap(prompt, current_prompt)
                 st.caption(prompt["use_case"])
                 render_prompt_badges(prompt, max_tags=2)
 
@@ -554,13 +555,19 @@ def render_results(results: list[dict], current_prompt: dict | None) -> None:
     for prompt in main_results[:MAX_RESULTS]:
         with st.container(border=True):
             selected = current_prompt and prompt["id"] == current_prompt["id"]
-            render_result_select_copy_button(prompt, selected=bool(selected), key=f"select-{prompt['id']}")
+            if st.button(
+                prompt["title"],
+                key=f"select-{prompt['id']}",
+                use_container_width=True,
+                type="primary" if selected else "secondary",
+            ):
+                handle_result_tap(prompt, current_prompt)
             st.caption(prompt["use_case"])
             render_prompt_badges(prompt, max_tags=2)
 
 
 def render_prompt_detail(prompt: dict | None) -> None:
-    st.markdown("#### Preview")
+    st.markdown("### Preview")
     if not prompt:
         st.info("Select a prompt to inspect it here.")
         return
@@ -598,16 +605,7 @@ def render_prompt_detail(prompt: dict | None) -> None:
         render_variable_callout(prompt["variables"])
 
     render_canonical_preview(prompt["content"])
-    st.markdown(
-        "<div class='copy-footer-note'>Finished reviewing? Copy the canonical prompt here too.</div>",
-        unsafe_allow_html=True,
-    )
-    render_copy_button(
-        "Copy original",
-        prompt["content"],
-        f"original-bottom-{prompt['id']}",
-        primary=True,
-    )
+    st.markdown("<div class='copy-footer-note'>Canonical text above stays unchanged.</div>", unsafe_allow_html=True)
 
     if st.session_state["edit_mode"]:
         st.divider()
@@ -675,7 +673,6 @@ def main() -> None:
         recent_prompt_ids=st.session_state["recent_prompt_ids"],
     )
     prompts_by_id = {prompt["id"]: prompt for prompt in prompts}
-    apply_pick_from_query(prompts_by_id)
     current_prompt = resolve_selected_prompt(ranked_prompts, st.session_state["selected_prompt_id"])
 
     render_pending_switch(prompts_by_id)

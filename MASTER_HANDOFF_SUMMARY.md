@@ -2260,6 +2260,82 @@ Validation:
 - `python -m py_compile app.py` passed
 - `python -m unittest -v tests/test_prompt_library.py` passed (`5/5`)
 - Streamlit headless startup probe passed (`HTTP 200`)
+
+## 18.18 Mobile-first selection reset + UI density/polish pass (2026-04-14)
+
+Objective:
+- eliminate Safari/iPhone result-tap behavior that felt like popup/navigation
+- remove navigation-based selection transport
+- keep one authoritative selection source: `st.session_state["selected_prompt_id"]`
+- improve mobile visual quality and compactness without changing product model
+
+Core interaction changes in `app.py`:
+
+1. Removed navigation-driven result selection path:
+- removed custom result-select anchor/HTML component path
+- removed query-param `pick` hydration path
+- no selection updates now rely on:
+  - `target="_top"`
+  - `window.parent.location`
+  - query-param routing as primary selection transport
+
+2. Added native in-app result selection:
+- new `handle_result_tap(target_prompt, current_prompt)` routes taps through `request_prompt_switch(...)`
+- uses only Streamlit session state transitions
+- blocked switch (dirty working copy) continues to set pending prompt and warning flow
+- successful switch reruns immediately so highlight and preview stay correlated
+
+3. Updated results rendering to native buttons:
+- `render_results(...)` now uses `st.button(...)` per result row
+- selected state uses `type="primary"`; unselected uses `type="secondary"`
+- no auto-copy on result tap (selection-first behavior)
+
+Mobile-first UI polish in `inject_styles()`:
+
+1. Header/control compaction:
+- reduced top/bottom container padding
+- reduced search input height/padding
+- smaller popover control buttons (Filters/Admin)
+- condensed summary line text and spacing
+
+2. Results density and hierarchy:
+- tightened card/chip spacing and typography
+- removed oversized, inner framed red/white result-button look by deleting custom HTML result button styling path
+- shifted selected state to subtle bordered gradient with left accent instead of harsh red pill
+- compacted result metadata/tag visual weight
+
+3. Preview readability improvements:
+- reduced preview block padding and font size for mobile scanability
+- compacted callout/inline-note/draft-note spacing
+- removed redundant bottom duplicate copy block to reduce vertical bloat
+- preserved explicit top `Copy original` and `Customize copy` actions
+
+4. Scroll behavior improvement:
+- `get_results_panel_height(...)` now returns `"content"` always, removing fixed-height nested scrolling behavior that was especially awkward on phone
+
+Product model preserved:
+- two-stage results -> preview
+- metadata on results and preview
+- canonical vs working-copy separation
+- recent prompts
+- search/filter ranking behavior
+- rebuild/download admin flow
+- dirty-edit switch protection
+- explicit copy actions for canonical and edited prompts
+
+Validation:
+- grep/scan check confirms no remaining selection-path usage of:
+  - `target="_top"`
+  - `window.parent.location`
+  - query-param `pick`
+  - old custom result-select bridge functions
+- `python -m py_compile app.py` passed
+- `python -m unittest -v tests/test_prompt_library.py` passed (`5/5`)
+- Streamlit startup probe passed (`HTTP 200`)
+
+Remaining caveat:
+- this environment cannot fully emulate iPhone Safari runtime behavior, so final UX confirmation still requires direct tap-testing on deployed mobile Safari.
+- however, the previously problematic navigation-based architecture has been removed from the primary selection flow.
 - Streamlit headless startup probe passed (`HTTP 200`)
 
 Notes:
