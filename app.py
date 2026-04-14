@@ -230,22 +230,18 @@ def render_auto_copy_once() -> None:
     payload_js = json.dumps(payload)
     components.html(
         f"""
-        <div id="auto-copy-status" style="font-size:12px;color:#475569;">Copying selected prompt...</div>
         <script>
         (async () => {{
-            const status = document.getElementById("auto-copy-status");
             try {{
                 await navigator.clipboard.writeText({payload_js});
-                status.textContent = "Selected prompt copied.";
-                status.style.color = "#047857";
             }} catch (error) {{
-                status.textContent = "Browser blocked auto-copy. Use Copy original.";
-                status.style.color = "#b45309";
+                // Browser policy can block programmatic copy after rerun boundaries.
+                // Keep this silent; explicit copy buttons remain the reliable fallback.
             }}
         }})();
         </script>
         """,
-        height=28,
+        height=0,
     )
     st.session_state["auto_copy_payload"] = None
 
