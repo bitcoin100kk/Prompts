@@ -236,7 +236,8 @@ def render_result_select_copy_button(prompt: dict, *, selected: bool, key: str) 
     border = "#dc2626" if selected else "#1f2937"
     components.html(
         f"""
-        <button id="pick-copy-{key}" style="
+        <a id="pick-copy-{key}" href="#" target="_top" style="
+            display: block;
             width: 100%;
             padding: 0.62rem 0.75rem;
             border-radius: 0.7rem;
@@ -244,14 +245,19 @@ def render_result_select_copy_button(prompt: dict, *, selected: bool, key: str) 
             background: {background};
             color: #f8fafc;
             font-weight: 600;
-            cursor: pointer;">
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            box-sizing: border-box;">
             {label}
-        </button>
+        </a>
         <script>
-        const btn = document.getElementById("pick-copy-{key}");
-        btn.addEventListener("click", () => {{
-            const url = new URL(window.parent.location.href);
-            url.searchParams.set("pick", {prompt_id});
+        const link = document.getElementById("pick-copy-{key}");
+        const targetUrl = new URL(window.parent.location.href);
+        targetUrl.searchParams.set("pick", {prompt_id});
+        link.href = targetUrl.toString();
+
+        link.addEventListener("click", () => {{
             try {{
                 const fallback = window.parent.document.createElement("textarea");
                 fallback.value = {payload};
@@ -271,7 +277,6 @@ def render_result_select_copy_button(prompt: dict, *, selected: bool, key: str) 
             }} catch (error) {{
                 // Clipboard API can fail silently in some browser contexts.
             }}
-            window.parent.location.href = url.toString();
         }});
         </script>
         """,

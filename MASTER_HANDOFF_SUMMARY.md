@@ -2226,6 +2226,40 @@ Fix implemented in `app.py`:
 Validation:
 - `python -m py_compile app.py` passed
 - `python -m unittest -v tests/test_prompt_library.py` passed (`5/5`)
+
+## 18.17 Deployed iframe fix: real top-level link navigation for pick state (2026-04-13)
+
+User-reported issue after 18.16:
+- auto-copy still worked
+- highlight and preview still failed to follow clicked result on deployed app
+
+Working diagnosis:
+- clipboard logic inside the component iframe was executing
+- parent-page navigation via `window.parent.location.href = ...` was still not reliably updating the Streamlit app in the deployed/sandboxed context
+- likely cause: programmatic parent navigation from iframe JS is less reliable than real user-activated top-level link navigation
+
+Fix implemented in `app.py`:
+
+1. Updated `render_result_select_copy_button(...)` to render an anchor instead of a button:
+- `<a ... target="_top">...</a>`
+- styled to look identical to the previous result button
+
+2. Precomputed the destination URL in the component:
+- reads `window.parent.location.href`
+- appends `pick=<prompt_id>`
+- assigns the result to `link.href`
+
+3. Preserved copy-on-click behavior:
+- click handler still performs browser-side copy attempts before navigation
+- navigation itself is now handled by native anchor behavior rather than direct JS location assignment
+
+Rationale:
+- native top-level anchor navigation is more likely to be permitted in Streamlit’s deployed iframe sandbox than JS-driven parent location reassignment
+
+Validation:
+- `python -m py_compile app.py` passed
+- `python -m unittest -v tests/test_prompt_library.py` passed (`5/5`)
+- Streamlit headless startup probe passed (`HTTP 200`)
 - Streamlit headless startup probe passed (`HTTP 200`)
 
 Notes:
