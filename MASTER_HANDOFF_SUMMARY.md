@@ -2120,3 +2120,31 @@ Validation run:
 - `python -m py_compile app.py prompt_app\\parser.py` passed
 - `python -m unittest tests.test_prompt_library` passed (`5/5`)
 - Streamlit startup probe passed (`STATUS=200`)
+
+## 18.12 Clipboard reliability fix for result-click copy (2026-04-13)
+
+User-reported issue after 18.11:
+- selection/highlight/preview were corrected
+- result-click copy still failed in practice
+
+Root cause:
+- server-side clipboard write path was using a PowerShell invocation variant that returned success but did not consistently update clipboard in this runtime/session.
+
+Fix implemented in `app.py`:
+
+1. Updated Windows clipboard write path inside `copy_text_on_select(...)`:
+- now uses `powershell -NoProfile -STA -EncodedCommand <base64-utf16-script>`
+- script form:
+  - `Set-Clipboard -Value @' ...text... '@`
+- this avoids fragile stdin/pipeline behavior and improves session reliability.
+
+2. Kept existing fallbacks:
+- Win32 API fallback remains in place if PowerShell command path fails.
+- manual `Copy original` remains available regardless.
+
+Validation:
+- `python -m py_compile app.py` passed
+- `python -m unittest tests.test_prompt_library` passed (`5/5`)
+- integrated clipboard round-trip check succeeded:
+  - `copy_text_on_select('integrated-check-123') -> True`
+  - immediate `Get-Clipboard` returned `integrated-check-123`

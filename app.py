@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import json
+import base64
 import platform
 import ctypes
 import subprocess
@@ -225,14 +226,10 @@ def copy_text_on_select(text: str) -> bool:
     """Copy prompt text server-side to avoid browser clipboard policy blocking."""
     try:
         if platform.system().lower().startswith("win"):
+            script = "Set-Clipboard -Value @'\n" + text + "\n'@"
+            encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
             result = subprocess.run(
-                [
-                    "powershell",
-                    "-NoProfile",
-                    "-Command",
-                    "$text = [Console]::In.ReadToEnd(); Set-Clipboard -Value $text",
-                ],
-                input=text,
+                ["powershell", "-NoProfile", "-STA", "-EncodedCommand", encoded],
                 text=True,
                 capture_output=True,
             )
