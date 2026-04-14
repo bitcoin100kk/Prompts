@@ -164,6 +164,7 @@ def ensure_state() -> None:
         "query": "",
         "auto_copy_payload": None,
         "auto_copy_on_select": False,
+        "auto_copy_feedback": "",
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -247,6 +248,16 @@ def render_auto_copy_once() -> None:
         height=0,
     )
     st.session_state["auto_copy_payload"] = None
+
+
+def set_auto_copy_feedback(prompt_title: str) -> None:
+    if not st.session_state.get("auto_copy_on_select", False):
+        st.session_state["auto_copy_feedback"] = ""
+        return
+    st.session_state["auto_copy_feedback"] = (
+        f"Auto-copy was attempted for '{prompt_title}'. "
+        "If clipboard did not change, your browser blocked it. Use Copy original."
+    )
 
 
 def render_copy_button(label: str, text: str, key: str, *, primary: bool = True) -> None:
@@ -486,6 +497,7 @@ def render_results(results: list[dict], current_prompt: dict | None) -> None:
                     switch_state = request_prompt_switch(prompt, current_prompt)
                     if switch_state != "blocked":
                         queue_auto_copy(prompt["content"])
+                        set_auto_copy_feedback(prompt["title"])
                     st.rerun()
                 st.caption(prompt["use_case"])
                 render_prompt_badges(prompt, max_tags=2)
@@ -507,6 +519,7 @@ def render_results(results: list[dict], current_prompt: dict | None) -> None:
                     switch_state = request_prompt_switch(prompt, current_prompt)
                     if switch_state != "blocked":
                         queue_auto_copy(prompt["content"])
+                        set_auto_copy_feedback(prompt["title"])
                     st.rerun()
             st.caption(prompt["use_case"])
             render_prompt_badges(prompt, max_tags=2)
@@ -632,6 +645,8 @@ def main() -> None:
 
     render_pending_switch(prompts_by_id)
     render_auto_copy_once()
+    if st.session_state.get("auto_copy_feedback"):
+        st.warning(st.session_state["auto_copy_feedback"])
 
     left_col, right_col = st.columns([0.95, 1.35], gap="large")
     with left_col:
