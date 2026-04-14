@@ -1,1 +1,0 @@
-"""Prompt library app package."""
