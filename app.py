@@ -133,6 +133,11 @@ def inject_styles() -> None:
             font-size: 0.78rem;
             margin: 0.58rem 0 0.36rem;
         }
+        .quick-copy-note {
+            color: #9badcf;
+            font-size: 0.77rem;
+            margin: 0.22rem 0 0.35rem;
+        }
         h2, h3, h4 {
             color: var(--title);
             margin-top: 0.1rem;
@@ -320,18 +325,36 @@ def handle_result_tap(target_prompt: dict, current_prompt: dict | None) -> None:
 def render_copy_button(label: str, text: str, key: str, *, primary: bool = True) -> None:
     button_label = json.dumps(label)
     payload = json.dumps(text)
-    background = "#1d4ed8" if primary else "#0f766e"
+    background = "linear-gradient(180deg, #1f4fcf 0%, #1b42ab 100%)" if primary else "#12384a"
+    border = "#2a64f8" if primary else "#2b6f8b"
+    shadow = "inset 3px 0 0 0 #88a7ff" if primary else "inset 3px 0 0 0 #5ab2d3"
     components.html(
         f"""
-        <button id="copy-button-{key}" style="
+        <style>
+        html, body {{
+            margin: 0;
+            padding: 0;
+            background: transparent;
+        }}
+        #copy-button-{key} {{
             width: 100%;
-            padding: 0.65rem 0.9rem;
-            border: none;
-            border-radius: 0.7rem;
+            padding: 0.56rem 0.8rem;
+            border-radius: 0.72rem;
+            border: 1px solid {border};
             background: {background};
-            color: white;
-            font-weight: 600;
-            cursor: pointer;">
+            color: #f6f9ff;
+            font-weight: 650;
+            font-size: 0.95rem;
+            line-height: 1.1;
+            cursor: pointer;
+            box-shadow: {shadow};
+        }}
+        #copy-button-{key}:hover {{
+            filter: brightness(1.05);
+        }}
+        </style>
+        <button id="copy-button-{key}" style="
+            width: 100%;">
             {label}
         </button>
         <script>
@@ -343,20 +366,23 @@ def render_copy_button(label: str, text: str, key: str, *, primary: bool = True)
             try {{
                 await navigator.clipboard.writeText(payload);
                 button.textContent = "Copied";
-                button.style.background = "#047857";
+                button.style.background = "linear-gradient(180deg, #0d8f63 0%, #0a6f4e 100%)";
+                button.style.borderColor = "#1eb980";
             }} catch (error) {{
                 button.textContent = "Clipboard blocked - press Ctrl+C after selecting text";
-                button.style.background = "#b45309";
+                button.style.background = "#7a4a10";
+                button.style.borderColor = "#a56b22";
             }}
 
             setTimeout(() => {{
                 button.textContent = originalLabel;
                 button.style.background = "{background}";
+                button.style.borderColor = "{border}";
             }}, 1800);
         }});
         </script>
         """,
-        height=54,
+        height=48,
     )
 
 
@@ -544,6 +570,12 @@ def render_results(results: list[dict], current_prompt: dict | None) -> None:
                     type="primary" if selected else "secondary",
                 ):
                     handle_result_tap(prompt, current_prompt)
+                if selected:
+                    render_copy_button("Copy selected", prompt["content"], f"quick-recent-{prompt['id']}", primary=True)
+                    st.markdown(
+                        "<div class='quick-copy-note'>Fast path: copy selected prompt here.</div>",
+                        unsafe_allow_html=True,
+                    )
                 st.caption(prompt["use_case"])
                 render_prompt_badges(prompt, max_tags=2)
 
@@ -562,6 +594,12 @@ def render_results(results: list[dict], current_prompt: dict | None) -> None:
                 type="primary" if selected else "secondary",
             ):
                 handle_result_tap(prompt, current_prompt)
+            if selected:
+                render_copy_button("Copy selected", prompt["content"], f"quick-main-{prompt['id']}", primary=True)
+                st.markdown(
+                    "<div class='quick-copy-note'>Fast path: copy selected prompt here.</div>",
+                    unsafe_allow_html=True,
+                )
             st.caption(prompt["use_case"])
             render_prompt_badges(prompt, max_tags=2)
 
@@ -576,15 +614,6 @@ def render_prompt_detail(prompt: dict | None) -> None:
 
     st.markdown(f"## {prompt['title']}")
     st.caption(prompt["use_case"])
-    render_prompt_badges(prompt)
-
-    meta_left, meta_right = st.columns(2)
-    with meta_left:
-        st.markdown(f"**Last updated**: {prompt['last_updated']}")
-        st.markdown(f"**Source section**: {prompt['source_title']}")
-    with meta_right:
-        st.markdown(f"**Prompt ID**: `{prompt['id']}`")
-        st.markdown(f"**Aliases**: {', '.join(prompt['aliases']) if prompt['aliases'] else 'None'}")
 
     action_left, action_right = st.columns(2, gap="small")
     with action_left:
@@ -601,11 +630,20 @@ def render_prompt_detail(prompt: dict | None) -> None:
         unsafe_allow_html=True,
     )
 
-    if prompt["variables"]:
-        render_variable_callout(prompt["variables"])
-
     render_canonical_preview(prompt["content"])
     st.markdown("<div class='copy-footer-note'>Canonical text above stays unchanged.</div>", unsafe_allow_html=True)
+
+    with st.expander("Prompt details", expanded=False):
+        render_prompt_badges(prompt)
+        meta_left, meta_right = st.columns(2)
+        with meta_left:
+            st.markdown(f"**Last updated**: {prompt['last_updated']}")
+            st.markdown(f"**Source section**: {prompt['source_title']}")
+        with meta_right:
+            st.markdown(f"**Prompt ID**: `{prompt['id']}`")
+            st.markdown(f"**Aliases**: {', '.join(prompt['aliases']) if prompt['aliases'] else 'None'}")
+        if prompt["variables"]:
+            render_variable_callout(prompt["variables"])
 
     if st.session_state["edit_mode"]:
         st.divider()

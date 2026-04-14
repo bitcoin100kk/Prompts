@@ -2336,6 +2336,56 @@ Validation:
 Remaining caveat:
 - this environment cannot fully emulate iPhone Safari runtime behavior, so final UX confirmation still requires direct tap-testing on deployed mobile Safari.
 - however, the previously problematic navigation-based architecture has been removed from the primary selection flow.
+
+## 18.19 Fast-copy fallback + preview action reordering (2026-04-14)
+
+Context for this pass:
+- user requested the smallest defensible repair after mobile selection reset
+- current regressions were:
+  - no auto-copy on result selection
+  - `Copy original` visually inconsistent and too low in preview flow
+  - metadata above actions increased mobile scroll cost
+
+What changed in `app.py`:
+
+1. Kept native selection authoritative, did not reintroduce navigation hacks:
+- result tap still routes through native `st.button` + `request_prompt_switch(...)`
+- no query-param or iframe navigation transport was reintroduced
+
+2. Implemented fastest safe fallback for mobile copy (no scroll):
+- in `render_results(...)`, when a result is selected, the card now renders:
+  - `Copy selected` action directly under selected prompt title
+  - compact helper note (`Fast path: copy selected prompt here.`)
+- this restores a near-immediate copy path while preserving stable in-app selection
+
+3. Reordered preview for mobile-first task flow:
+- in `render_prompt_detail(...)` order is now:
+  - title
+  - use case
+  - primary actions (`Copy original`, `Customize copy`)
+  - canonical preview
+  - metadata/details in collapsible `Prompt details` expander
+- metadata remains available but is demoted below action+preview as requested
+
+4. Restyled custom copy button to match app system:
+- `render_copy_button(...)` updated to:
+  - transparent iframe background (removes white framed/foreign look)
+  - dark-theme gradient/border styling aligned with app palette
+  - compact dimensions and stronger typography consistency
+  - coherent success/error visual states
+
+Validation:
+- `python -m py_compile app.py` passed
+- `python -m unittest tests.test_prompt_library` passed (`5/5`)
+- Streamlit startup probe passed (`HTTP 200`)
+- code scan confirms no reintroduced:
+  - `target="_top"`
+  - `window.parent.location`
+  - query-param pick routing
+
+Caveat:
+- deployed mobile one-tap copy-on-selection was not reintroduced in this pass because reliable same-tap browser clipboard capture in Streamlit without reintroducing drift-prone selection bridges remains uncertain.
+- implemented fallback is intentional: stable selection + immediate visible copy action at selection point and at top of preview.
 - Streamlit headless startup probe passed (`HTTP 200`)
 
 Notes:
